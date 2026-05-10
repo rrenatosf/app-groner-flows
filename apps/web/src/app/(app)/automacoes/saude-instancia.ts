@@ -1,4 +1,4 @@
-import type { automacoes } from "@/lib/db/schema";
+import type { ClienteAutomacao } from "@/lib/db/schema";
 import type { ValidationField } from "@/components/data-table";
 import {
   validateDadosConfiguracoes,
@@ -7,76 +7,99 @@ import {
   GROUP_COLUNA_INICIAL,
   GROUP_COLUNA_QUALIFICACAO,
   DADOS_CONFIG_FIELDS,
+  type DadosConfigGroup,
 } from "./dados-config-shape";
 
-export type AutomacaoRow = typeof automacoes.$inferSelect;
+/** Linha de instância "rica" — joinada com colunas do catálogo pra
+ *  validar baseUrl / workflow / versão herdados. Catálogo é a fonte
+ *  de verdade pra esses campos; instância valida só lojaId/isActive
+ *  + shape de dados_configuracoes. */
+export type InstanciaRowFull = ClienteAutomacao & {
+  catalogoNome: string | null;
+  catalogoBaseUrl: string | null;
+  catalogoWorkflowId: string | null;
+  catalogoVersao: string | null;
+  /** Template do catálogo no momento do load — usado pelo edit modal pra
+   *  "restaurar template". Pode estar desatualizado se super editou
+   *  template após instância criada (decisão consciente: instância
+   *  não auto-sincroniza). */
+  catalogoTemplate: DadosConfigGroup[];
+};
 
-export type CriticalAutomacaoField = {
-  key: keyof AutomacaoRow;
+export type CriticalInstanciaField = {
+  key: keyof InstanciaRowFull;
   label: string;
 };
 
-/** Campos críticos pra "Saúde". Faltando qualquer um, badge vermelho. */
-export const CRITICAL_AUTOMACAO_FIELDS: CriticalAutomacaoField[] = [
-  { key: "nome", label: "Nome" },
+/** Campos críticos da instância. */
+export const CRITICAL_INSTANCIA_FIELDS: CriticalInstanciaField[] = [
   { key: "lojaId", label: "Loja" },
-  { key: "baseUrl", label: "Base URL" },
-  { key: "n8nWorkflowId", label: "ID workflow n8n" },
 ];
 
-export function pendenciasFor(a: AutomacaoRow): CriticalAutomacaoField[] {
-  return CRITICAL_AUTOMACAO_FIELDS.filter((f) => {
-    const v = a[f.key];
+const N8N_ID_RE = /^[A-Za-z0-9]{8,}$/;
+
+function isHttpsUrl(s: string): boolean {
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function pendenciasInstanciaFor(
+  r: InstanciaRowFull,
+): CriticalInstanciaField[] {
+  return CRITICAL_INSTANCIA_FIELDS.filter((f) => {
+    const v = r[f.key];
     if (v === null || v === undefined) return true;
     if (typeof v === "string" && v.trim() === "") return true;
     return false;
   });
 }
 
-const AUTOMACAO_LABELS: Record<string, string> = {
+const INSTANCIA_LABELS: Record<string, string> = {
   id: "ID",
   createdAt: "Criado em",
-  clienteId: "Cliente",
+  automacaoId: "Catálogo (FK)",
+  clienteId: "Cliente (FK)",
   lojaId: "Loja",
-  nome: "Nome",
-  descricao: "Descrição",
-  baseUrl: "Base URL",
-  n8nWorkflowId: "ID workflow n8n",
-  versao: "Versão",
   isActive: "Ativo",
   dadosConfiguracoes: "Configurações (jsonb)",
+  catalogoNome: "Nome (catálogo)",
+  catalogoBaseUrl: "Base URL (catálogo)",
+  catalogoWorkflowId: "ID workflow n8n (catálogo)",
+  catalogoVersao: "Versão (catálogo)",
 };
 
-const AUTOMACAO_EXPECTED: Record<string, string> = {
+const INSTANCIA_EXPECTED: Record<string, string> = {
   id: "número (PK)",
   createdAt: "timestamp",
+  automacaoId: "FK pra automacoes.id",
   clienteId: "FK pra clientes.id",
   lojaId: "uuid de Loja (não-vazio)",
-  nome: "string não-vazia",
-  descricao: "string ou null",
-  baseUrl: "https://... (URL HTTPS válida)",
-  n8nWorkflowId: "[A-Za-z0-9]{8,}",
-  versao: "string ou null",
   isActive: "boolean",
   dadosConfiguracoes:
     "array de objetos com 1 chave string → objeto",
+  catalogoNome: "herdado do catálogo (informativo)",
+  catalogoBaseUrl: "https://... (URL HTTPS válida) — herdado do catálogo",
+  catalogoWorkflowId: "[A-Za-z0-9]{8,} — herdado do catálogo",
+  catalogoVersao: "string ou null — herdado do catálogo",
 };
 
-const ALL_KEYS: (keyof AutomacaoRow)[] = [
+const ALL_KEYS: (keyof InstanciaRowFull)[] = [
   "id",
   "createdAt",
+  "automacaoId",
   "clienteId",
   "lojaId",
-  "nome",
-  "descricao",
-  "baseUrl",
-  "n8nWorkflowId",
-  "versao",
   "isActive",
+  "catalogoNome",
+  "catalogoBaseUrl",
+  "catalogoWorkflowId",
+  "catalogoVersao",
   "dadosConfiguracoes",
 ];
-
-const N8N_ID_RE = /^[A-Za-z0-9]{8,}$/;
 
 function fmtActual(v: unknown): string {
   if (v === null) return "null";
@@ -96,49 +119,43 @@ function fmtActual(v: unknown): string {
   }
 }
 
-function isHttpsUrl(s: string): boolean {
-  try {
-    const u = new URL(s);
-    return u.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-export function buildAutomacaoValidation(
-  a: AutomacaoRow,
+export function buildInstanciaValidation(
+  r: InstanciaRowFull,
 ): ValidationField[] {
   const out: ValidationField[] = [];
   for (const k of ALL_KEYS) {
-    const val = a[k];
+    const val = r[k];
     let status: "ok" | "warn" = "ok";
     let detail: string | undefined;
 
-    if (k === "nome") {
-      if (typeof val !== "string" || val.trim().length === 0) {
-        status = "warn";
-        detail = "nome é obrigatório";
-      }
-    } else if (k === "lojaId") {
+    if (k === "lojaId") {
       if (typeof val !== "string" || val.trim().length === 0) {
         status = "warn";
         detail = "lojaId é obrigatório";
       }
-    } else if (k === "baseUrl") {
+    } else if (k === "catalogoBaseUrl") {
       if (val === null || val === undefined) {
         status = "warn";
-        detail = "base URL não informada";
-      } else if (typeof val === "string" && val.trim() !== "" && !isHttpsUrl(val)) {
+        detail = "base URL não informada no catálogo";
+      } else if (
+        typeof val === "string" &&
+        val.trim() !== "" &&
+        !isHttpsUrl(val)
+      ) {
         status = "warn";
-        detail = "base URL deve ser HTTPS válida";
+        detail = "base URL do catálogo deve ser HTTPS válida";
       }
-    } else if (k === "n8nWorkflowId") {
+    } else if (k === "catalogoWorkflowId") {
       if (val === null || val === undefined) {
         status = "warn";
-        detail = "workflow n8n não vinculado";
-      } else if (typeof val === "string" && val.trim() !== "" && !N8N_ID_RE.test(val.trim())) {
+        detail = "workflow n8n não vinculado no catálogo";
+      } else if (
+        typeof val === "string" &&
+        val.trim() !== "" &&
+        !N8N_ID_RE.test(val.trim())
+      ) {
         status = "warn";
-        detail = "ID n8n fora do padrão [A-Za-z0-9]{8,}";
+        detail = "ID n8n do catálogo fora do padrão [A-Za-z0-9]{8,}";
       }
     } else if (k === "dadosConfiguracoes") {
       const v = validateDadosConfiguracoes(val);
@@ -150,19 +167,16 @@ export function buildAutomacaoValidation(
 
     out.push({
       key: String(k),
-      label: AUTOMACAO_LABELS[k] ?? k,
-      expected: AUTOMACAO_EXPECTED[k] ?? "—",
+      label: INSTANCIA_LABELS[k] ?? String(k),
+      expected: INSTANCIA_EXPECTED[k] ?? "—",
       actual: fmtActual(val),
       status,
       detail,
     });
   }
 
-  // --- Template canônico (Bloco G): 3 grupos esperados em dadosConfiguracoes ---
-  // Não bloqueia salvar — apenas warns visuais na validação super-only.
-  // Skip se shape geral é inválido — evita warning-spam (4 warns sobrepostos
-  // pra mesma raiz: shape quebrado).
-  const cfg = a.dadosConfiguracoes;
+  // --- Template canônico (Bloco G): 3 grupos esperados em dados_configuracoes ---
+  const cfg = r.dadosConfiguracoes;
   const shapeOk = validateDadosConfiguracoes(cfg).ok;
   if (!shapeOk) return out;
 
@@ -206,7 +220,7 @@ export function buildAutomacaoValidation(
     });
   }
 
-  // Grupo 2: coluna_inicial (nome+id preenchidos, tipo === "inicial")
+  // Grupo 2: coluna_inicial
   {
     const g = findGroup(cfg, GROUP_COLUNA_INICIAL);
     let status: "ok" | "warn" = "ok";
@@ -240,7 +254,7 @@ export function buildAutomacaoValidation(
     });
   }
 
-  // Grupo 3: coluna_qualificacao (nome+id preenchidos, tipo === "qualificacao")
+  // Grupo 3: coluna_qualificacao
   {
     const g = findGroup(cfg, GROUP_COLUNA_QUALIFICACAO);
     let status: "ok" | "warn" = "ok";

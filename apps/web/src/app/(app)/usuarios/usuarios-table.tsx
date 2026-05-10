@@ -17,6 +17,7 @@ import {
   BooleanToggle,
   ColumnPicker,
   CopyButton,
+  HealthToggle,
   IconCheck,
   IconInfo,
   IconWarn,
@@ -24,6 +25,7 @@ import {
   PAGE_SIZE_OPTIONS,
   SearchableSelect,
   TablePagination,
+  useHealthToggle,
   type PageSize,
 } from "@/components/data-table";
 import {
@@ -166,6 +168,7 @@ export function UsuariosTable({
   embeddedClienteId,
   embeddedClienteNome,
   embeddedLojasDoCliente,
+  embeddedLojaIdPreSelected,
 }: {
   rows: UsuarioRow[];
   isSuper: boolean;
@@ -177,16 +180,22 @@ export function UsuariosTable({
   embeddedClienteId?: number;
   embeddedClienteNome?: string;
   embeddedLojasDoCliente?: { id: string; nome: string }[];
+  /** Drilldown loja: pré-marca essa loja no checklist do modal "Novo". */
+  embeddedLojaIdPreSelected?: string;
 }) {
   const router = useRouter();
+  const { showHealth, setShowHealth } = useHealthToggle("usuarios");
 
   const visibleDefs = useMemo(
     () =>
       COLUMNS.filter(
         (c) =>
-          (!c.superOnly || isSuper) && (!embedded || c.key !== "acoes"),
+          (!c.superOnly || isSuper) &&
+          (!embedded || c.key !== "acoes") &&
+          (showHealth ||
+            (c.key !== "saude" && c.key !== "validacao")),
       ),
-    [isSuper, embedded],
+    [isSuper, embedded, showHealth],
   );
   const visibleKeys = useMemo(() => visibleDefs.map((c) => c.key), [visibleDefs]);
   // ColumnPicker: `acoes` nunca aparece — não é ocultável.
@@ -719,7 +728,7 @@ export function UsuariosTable({
                   >
                     {fmtVal(valueFor(r, d.key))}
                   </span>
-                  {isCellMissing(r, d.key) && (
+                  {showHealth && isCellMissing(r, d.key) && (
                     <span
                       title="Informação faltando"
                       aria-label="Informação faltando"
@@ -854,6 +863,7 @@ export function UsuariosTable({
             onShowAll={() => persistHidden(new Set())}
             onHideAll={() => persistHidden(new Set(visibleKeys.filter((k) => k !== "acoes")))}
           />
+          <HealthToggle value={showHealth} onChange={setShowHealth} />
           {isSuper && (
             <button
               type="button"
@@ -1083,6 +1093,11 @@ export function UsuariosTable({
           forcedClienteId={embeddedClienteId}
           forcedClienteNome={embeddedClienteNome}
           forcedLojasDoCliente={embeddedLojasDoCliente}
+          forcedLojaIdsPreSelected={
+            embeddedLojaIdPreSelected
+              ? [embeddedLojaIdPreSelected]
+              : undefined
+          }
           onClose={() => setNovoOpen(false)}
         />
       )}

@@ -40,7 +40,7 @@ const items: Item[] = [
     adminOnly: true,
   },
   { href: "/agentes", label: "Agentes" },
-  { href: "/automacoes", label: "Automações" },
+  { href: "/automacoes", label: "Automações", superOnly: true },
   { href: "/leads", label: "Leads" },
   { href: "/agendamentos", label: "Agendamentos" },
   { href: "/prompts", label: "Prompts" },

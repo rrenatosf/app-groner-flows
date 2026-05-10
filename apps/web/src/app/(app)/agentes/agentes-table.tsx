@@ -14,12 +14,14 @@ import { SearchBox } from "@/components/search-box";
 import {
   BooleanToggle,
   ColumnPicker,
+  HealthToggle,
   IconCheck,
   IconInfo,
   IconWarn,
   JsonValidationModal,
   PAGE_SIZE_OPTIONS,
   TablePagination,
+  useHealthToggle,
   type PageSize,
 } from "@/components/data-table";
 import {
@@ -138,13 +140,17 @@ export function AgentesTable({
   embedded?: boolean;
 }) {
   const router = useRouter();
+  const { showHealth, setShowHealth } = useHealthToggle("agentes");
   const visibleDefs = useMemo(
     () =>
       COLUMNS.filter(
         (c) =>
-          (!c.superOnly || isSuper) && (!embedded || c.key !== "tenant"),
+          (!c.superOnly || isSuper) &&
+          (!embedded || c.key !== "tenant") &&
+          (showHealth ||
+            (c.key !== "saude" && c.key !== "validacao")),
       ),
-    [isSuper, embedded],
+    [isSuper, embedded, showHealth],
   );
   const visibleKeys = useMemo(() => visibleDefs.map((c) => c.key), [visibleDefs]);
 
@@ -499,7 +505,7 @@ export function AgentesTable({
                   >
                     {fmtVal(valueFor(r, d.key))}
                   </span>
-                  {isCellMissing(r, d.key) && (
+                  {showHealth && isCellMissing(r, d.key) && (
                     <span
                       title="Informação faltando"
                       aria-label="Informação faltando"
@@ -617,6 +623,7 @@ export function AgentesTable({
             onShowAll={() => persistHidden(new Set())}
             onHideAll={() => persistHidden(new Set(visibleKeys))}
           />
+          <HealthToggle value={showHealth} onChange={setShowHealth} />
           {isSuper && (
             <button
               type="button"

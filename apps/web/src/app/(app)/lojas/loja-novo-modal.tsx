@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SearchableSelect } from "@/components/data-table";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import { fetchCrmLojasForClienteAction } from "@/server/actions/cliente-crm";
 import { LOJA_AGENDA_DEFAULTS } from "@/lib/db/schema";
 import { createLoja, type CreateLojaInput } from "./actions";
@@ -47,6 +49,7 @@ export function LojaNovoModal({
   const [form, setForm] = useState<Record<string, string>>({});
   const [clienteId, setClienteId] = useState<number | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   // Lojas vindas do CRM pra opção de importar.
   const [crmLojas, setCrmLojas] = useState<CrmLojaSummary[] | null>(null);
   const [crmErr, setCrmErr] = useState<string | null>(null);
@@ -132,14 +135,7 @@ export function LojaNovoModal({
     });
   }, [open, clienteId]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm({ ...LOJA_AGENDA_DEFAULTS } as Record<string, string>, form);
 
   if (!open) return null;
 
@@ -242,47 +238,45 @@ export function LojaNovoModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[640px] max-h-[90vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div>
-            <div className="label-eyebrow">Nova</div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)]">
-              Cadastro de loja
-            </h2>
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow="Nova"
+      title="Cadastro de loja"
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
+            Demais campos podem ser preenchidos depois inline ou no modal.
+          </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          <button
+            type="submit"
+            form="modal-form"
+            disabled={pending || clienteId === null}
+            className="chip chip-mint text-[12px] px-3 py-1.5"
+            style={{ opacity: clienteId === null ? 0.5 : 1 }}
+          >
+            {pending ? "Criando…" : "Criar loja"}
+          </button>
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         {err && (
           <div
             className="px-5 py-2 text-[12px]"
@@ -612,39 +606,8 @@ export function LojaNovoModal({
           />
         </div>
 
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
-            Demais campos podem ser preenchidos depois inline ou no modal.
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={pending || clienteId === null}
-              className="chip chip-mint text-[12px] px-3 py-1.5"
-              style={{ opacity: clienteId === null ? 0.5 : 1 }}
-            >
-              {pending ? "Criando…" : "Criar loja"}
-            </button>
-          </div>
-        </div>
       </form>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -681,14 +644,14 @@ function Field({
   hint?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1">
+    <label className="flex flex-col gap-1" title={hint}>
       <span className="text-[11px] uppercase tracking-wider text-[color:var(--fg-subtle)] inline-flex items-center gap-1.5">
         <span>{label}</span>
         {hint && (
           <span
             aria-label={hint}
             title={hint}
-            className="inline-flex items-center justify-center cursor-help select-none"
+            className="inline-flex items-center justify-center select-none"
             style={{
               width: 13,
               height: 13,

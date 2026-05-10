@@ -5,6 +5,15 @@
  *  compatibilidade com workflows N8N externos que consomem o JSON cru). */
 export type DadosConfigGroup = Record<string, Record<string, unknown>>;
 
+/** Limites de sanidade — impedem JSON gigante de virar foot-gun
+ *  (rerender lento, payload pesado em writes, abuse). Valores alinhados
+ *  com doc Notion "Tabelas de Automações" (15 grupos / 30 campos). */
+export const MAX_GRUPOS = 15;
+export const MAX_CAMPOS_POR_GRUPO = 30;
+export const MAX_ARRAY_LEN = 50;
+// 4000 cobre prompts N8N típicos (~1500-2000 chars) com folga.
+export const MAX_STRING_LEN = 4000;
+
 type Err = { ok: false; error: string };
 
 /** Valida que o input é um array onde cada item é um objeto com
@@ -18,6 +27,12 @@ export function validateDadosConfiguracoes(
 ): { ok: true; v: DadosConfigGroup[] } | Err {
   if (!Array.isArray(raw)) {
     return { ok: false, error: "dados_configuracoes deve ser um array." };
+  }
+  if (raw.length > MAX_GRUPOS) {
+    return {
+      ok: false,
+      error: `Limite excedido: até ${MAX_GRUPOS} grupos por automação (recebidos ${raw.length}). Sistema precisa ser ajustado pra suportar mais — fale com o time de dev.`,
+    };
   }
   const out: DadosConfigGroup[] = [];
   for (let i = 0; i < raw.length; i++) {
@@ -43,7 +58,41 @@ export function validateDadosConfiguracoes(
         error: `Item ${i} (chave "${k}"): valor deve ser objeto (não-null, não-array).`,
       };
     }
-    out.push({ [k]: v as Record<string, unknown> });
+    const inner = v as Record<string, unknown>;
+    const innerKeys = Object.keys(inner);
+    if (innerKeys.length > MAX_CAMPOS_POR_GRUPO) {
+      return {
+        ok: false,
+        error: `Limite excedido no grupo "${k}": até ${MAX_CAMPOS_POR_GRUPO} campos por grupo (recebidos ${innerKeys.length}). Sistema precisa ser ajustado pra suportar mais — fale com o time de dev.`,
+      };
+    }
+    for (const fk of innerKeys) {
+      const fv = inner[fk];
+      if (typeof fv === "string" && fv.length > MAX_STRING_LEN) {
+        return {
+          ok: false,
+          error: `Grupo "${k}", campo "${fk}": string excede ${MAX_STRING_LEN} caracteres (${fv.length}).`,
+        };
+      }
+      if (Array.isArray(fv)) {
+        if (fv.length > MAX_ARRAY_LEN) {
+          return {
+            ok: false,
+            error: `Grupo "${k}", campo "${fk}": array excede ${MAX_ARRAY_LEN} elementos (${fv.length}).`,
+          };
+        }
+        for (let j = 0; j < fv.length; j++) {
+          const el = fv[j];
+          if (typeof el === "string" && el.length > MAX_STRING_LEN) {
+            return {
+              ok: false,
+              error: `Grupo "${k}", campo "${fk}"[${j}]: string excede ${MAX_STRING_LEN} caracteres.`,
+            };
+          }
+        }
+      }
+    }
+    out.push({ [k]: inner });
   }
   return { ok: true, v: out };
 }

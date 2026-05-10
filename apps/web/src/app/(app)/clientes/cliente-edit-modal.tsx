@@ -42,6 +42,8 @@ import {
 import type { ClienteRow } from "./clientes-table";
 import { pendenciasFor, type CriticalField } from "./saude";
 import { PasswordConfirm } from "@/components/password-confirm";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import { SecretInput } from "@/components/data-table";
 import { CrmStatusSlots } from "@/components/crm/crm-status-slots";
 import type { CrmStatusSlot, CrmStatusTipo } from "@/lib/db/schema";
@@ -161,10 +163,14 @@ export function ClienteEditModal({
     }
   }, [open, cliente]);
 
+  const [initialForm, setInitialForm] = useState<Record<string, string>>({});
+  const [initialIsActive, setInitialIsActive] = useState(true);
+  const [initialIsSuperadmin, setInitialIsSuperadmin] = useState(false);
+
   // Re-inicializa form a cada troca de cliente atual.
   useEffect(() => {
     if (!current) return;
-    setForm({
+    const next = {
       nome: current.nome ?? "",
       email: current.email ?? "",
       telefone: current.telefone ?? "",
@@ -175,9 +181,13 @@ export function ClienteEditModal({
       apiBaseUrl: current.apiBaseUrl ?? "",
       apiToken: current.apiToken ?? "",
       crmToken: current.crmToken ?? "",
-    });
+    };
+    setForm(next);
+    setInitialForm(next);
     setIsActive(current.isActive ?? true);
+    setInitialIsActive(current.isActive ?? true);
     setIsSuperadmin(current.isSuperadmin ?? false);
+    setInitialIsSuperadmin(current.isSuperadmin ?? false);
     setInstancias(null);
     setInstErr(null);
     setPickedInstId(null);
@@ -187,14 +197,10 @@ export function ClienteEditModal({
     setCheckboxPrompt(null);
   }, [current]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm(
+    { form: initialForm, isActive: initialIsActive, isSuperadmin: initialIsSuperadmin },
+    { form, isActive, isSuperadmin },
+  );
 
   const pendencias = useMemo<CriticalField[]>(
     () => (current ? pendenciasFor(current, { isSuper }) : []),
@@ -346,48 +352,55 @@ export function ClienteEditModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{ backgroundColor: "rgba(2,8,5,0.62)", backdropFilter: "blur(2px)" }}
+    <>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow={`Cliente #${current.id}`}
+      title={current.nome ?? "(sem nome)"}
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
+            {pendencias.length === 0
+              ? "Cadastro completo."
+              : `${pendencias.length} pendência${
+                  pendencias.length === 1 ? "" : "s"
+                }`}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="modal-form"
+            disabled={pending}
+            className="chip chip-mint text-[12px] px-3 py-1.5"
+          >
+            {pending ? "Salvando…" : "Salvar"}
+          </button>
+        </>
+      }
     >
-      <form
-        ref={formRef}
-        onSubmit={submit}
-        className="w-full max-w-[1100px] max-h-[92vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between gap-3"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="label-eyebrow">Cliente #{current.id}</div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)] truncate">
-              {current.nome ?? "(sem nome)"}
-            </h2>
-          </div>
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
+        <div className="px-5 pt-4 pb-2 flex items-center justify-end gap-2">
           <ClientePicker
             clientes={clientes}
             currentId={current.id}
             onPick={(id) => setCurrentId(id)}
           />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
-          >
-            ✕
-          </button>
         </div>
 
         {err && (
@@ -831,55 +844,22 @@ export function ClienteEditModal({
           </div>
         )}
 
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
-            {pendencias.length === 0
-              ? "Cadastro completo."
-              : `${pendencias.length} pendência${
-                  pendencias.length === 1 ? "" : "s"
-                }`}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={pending}
-              className="chip chip-mint text-[12px] px-3 py-1.5"
-            >
-              {pending ? "Salvando…" : "Salvar"}
-            </button>
-          </div>
-        </div>
       </form>
-      <PasswordConfirm
-        open={checkboxPrompt !== null}
-        title={
-          checkboxPrompt?.nextValue
-            ? "Ativar superadmin"
-            : "Remover superadmin"
-        }
-        message="Alterar privilégio de superadmin requer a senha do super atual (suporte). Digite-a pra confirmar."
-        pending={checkboxPrompt?.pending}
-        errorMessage={checkboxPrompt?.error ?? null}
-        onConfirm={confirmCheckbox}
-        onCancel={() => setCheckboxPrompt(null)}
-      />
-    </div>
+    </ModalShell>
+    <PasswordConfirm
+      open={checkboxPrompt !== null}
+      title={
+        checkboxPrompt?.nextValue
+          ? "Ativar superadmin"
+          : "Remover superadmin"
+      }
+      message="Alterar privilégio de superadmin requer a senha do super atual (suporte). Digite-a pra confirmar."
+      pending={checkboxPrompt?.pending}
+      errorMessage={checkboxPrompt?.error ?? null}
+      onConfirm={confirmCheckbox}
+      onCancel={() => setCheckboxPrompt(null)}
+    />
+    </>
   );
 }
 

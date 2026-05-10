@@ -69,6 +69,43 @@
   /* Tipografia */
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* ─── Aliases semânticos ────────────────────────────────────────────
+   * Mapeamento estável pra UI. Os ink-N continuam existindo, mas o
+   * pattern oficial daqui pra frente é:
+   *   surface-0  = página/canvas
+   *   surface-1  = card / seção
+   *   surface-2  = input / campo editável
+   * Trocar valor no futuro só mexe aqui — não cascateia em N arquivos.
+   */
+  --surface-0: var(--ink-1);
+  --surface-1: var(--ink-2);
+  --surface-2: var(--ink-3);
+  --surface-hover: var(--ink-4);
+
+  --input-bg: var(--surface-2);
+  --input-bg-readonly: transparent;
+  --input-border: var(--b-soft);
+  --input-border-hover: var(--b-base);
+  --input-border-focus: var(--mint-400);
+  --input-ring-focus: rgba(70, 200, 154, 0.18);
+  --input-fg: var(--fg);
+  --input-fg-readonly: var(--fg-muted);
+
+  --accent: var(--mint-400);
+  --accent-hover: var(--mint-300);
+  --accent-soft-bg: rgba(70, 200, 154, 0.08);
+  --accent-soft-border: rgba(70, 200, 154, 0.32);
+  --accent-fg-on: #04140c;
+
+  --danger: var(--rose-400);
+  --danger-hover: var(--rose-300);
+  --danger-soft-bg: var(--rose-bg);
+  --danger-soft-border: var(--rose-border);
+
+  --warning: var(--amber-400);
+  --warning-soft-bg: var(--amber-bg);
+  --warning-soft-border: var(--amber-border);
 }
 
 @theme inline {
@@ -96,6 +133,12 @@
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
 }
 
 /* ─── Base ───────────────────────────────────────────────────────────── */
@@ -285,7 +328,7 @@ body > * {
   justify-content: center;
   gap: 6px;
   background: var(--mint-400);
-  color: #04140c;
+  color: var(--accent-fg-on);
   font-weight: 600;
   font-size: 13px;
   letter-spacing: -0.01em;
@@ -445,4 +488,120 @@ body > * {
 
 .table-editorial tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* ─── Inputs (editável vs read-only) ────────────────────────────────── */
+.input-edit {
+  width: 100%;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 8px 11px;
+  color: var(--input-fg);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.input-edit:hover:not(:disabled):not([readonly]) {
+  border-color: var(--input-border-hover);
+}
+.input-edit:focus {
+  outline: none;
+  border-color: var(--input-border-focus);
+  box-shadow: 0 0 0 3px var(--input-ring-focus);
+}
+.input-edit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.input-edit.is-error {
+  border-color: var(--danger-soft-border);
+  border-width: 1.5px;
+}
+
+.input-readonly {
+  width: 100%;
+  background-color: var(--input-bg-readonly);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 11px;
+  color: var(--input-fg-readonly);
+  font-size: 13px;
+  font-family: inherit;
+  opacity: 0.85;
+  cursor: default;
+}
+
+/* ─── Botão danger (primary e ghost já existem) ────────────────────── */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--danger-soft-bg);
+  color: var(--danger-hover);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--danger-soft-border);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+.btn-danger:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ─── Card de seção ────────────────────────────────────────────────── */
+.card-section {
+  background-color: var(--surface-1);
+  border: 1px solid var(--b-base);
+  border-radius: 12px;
+  padding: 18px 20px;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22), inset 0 0 0 0.5px rgba(255, 255, 255, 0.02);
+}
+.card-section + .card-section {
+  margin-top: 20px;
+}
+.card-section--accent::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  opacity: 0.55;
+}
+.card-section__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.card-section__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.card-section__subtitle {
+  font-size: 11px;
+  color: var(--fg-subtle);
+}
+.card-section__sub {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--b-soft);
+}
+.card-section__sub-title {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin-bottom: 10px;
 }

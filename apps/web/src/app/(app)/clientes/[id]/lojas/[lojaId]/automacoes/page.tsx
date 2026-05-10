@@ -1,12 +1,10 @@
 import {
-  AutomacoesTable,
-  type LojaOption,
-} from "../../../../../automacoes/automacoes-table";
-import {
-  loadAutomacoesFromLoja,
+  loadCatalogoAtivo,
   loadClienteOrForbid,
+  loadInstanciasFromLoja,
 } from "../../../_data";
 import { loadLoja } from "../_data";
+import { ClienteAutomacoesTable } from "../../../automacoes/cliente-automacoes-table";
 
 export default async function LojaAutomacoesPage({
   params,
@@ -15,30 +13,38 @@ export default async function LojaAutomacoesPage({
 }) {
   const { id, lojaId } = await params;
   const clienteId = Number(id);
-  const { cliente, isSuper, session } = await loadClienteOrForbid(clienteId);
+  const { isSuper, session, cliente } = await loadClienteOrForbid(clienteId);
   const loja = await loadLoja(clienteId, lojaId);
 
-  const rows = await loadAutomacoesFromLoja(clienteId, lojaId);
+  const [rows, catalogo] = await Promise.all([
+    loadInstanciasFromLoja(clienteId, lojaId),
+    loadCatalogoAtivo(),
+  ]);
 
   // Super sempre edita; cliente kind=cliente edita; vendedor read-only.
   const canEdit = isSuper || session.kind === "cliente";
 
-  // Lojas pickers — só essa loja (escopo do drilldown).
-  const lojas: LojaOption[] = [{ id: loja.id, nome: loja.nome, clienteId }];
-
-  const clientesPicker = [
-    { id: cliente.id, nome: cliente.nome ?? `Cliente #${cliente.id}` },
+  // Apenas essa loja no escopo do drilldown.
+  const lojas = [
+    { id: loja.id, nome: loja.nome, crm_id: loja.crm_id ?? null },
   ];
 
   return (
     <div>
-      <AutomacoesTable
+      <ClienteAutomacoesTable
         rows={rows}
+        clienteId={clienteId}
+        cliente={{
+          crmTenant: cliente.crmTenant ?? null,
+          crmToken: cliente.crmToken ?? null,
+        }}
         isSuper={isSuper}
         canEdit={canEdit}
-        clientes={clientesPicker}
         lojas={lojas}
+        catalogo={catalogo}
+        crmColunas={cliente.crmStatusColunas}
         embedded
+        embeddedLojaId={loja.id}
       />
     </div>
   );

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createCliente, type CreateClienteInput } from "./actions";
 import { fetchWhatsappInstanciasByTenantAction } from "@/server/actions/cliente-crm";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import { PasswordConfirm } from "@/components/password-confirm";
 
 type Instancia = {
@@ -59,6 +61,7 @@ export function ClienteNovoModal({
     error: string | null;
   } | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -109,14 +112,10 @@ export function ClienteNovoModal({
     }));
   }
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm(
+    { form: {}, isActive: true, isSuperadmin: false },
+    { form, isActive, isSuperadmin },
+  );
 
   if (!open) return null;
 
@@ -169,44 +168,45 @@ export function ClienteNovoModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{ backgroundColor: "rgba(2,8,5,0.62)", backdropFilter: "blur(2px)" }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[640px] max-h-[90vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div>
-            <div className="label-eyebrow">Novo</div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)]">
-              Cadastro de cliente
-            </h2>
-          </div>
+    <>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow="Novo"
+      title="Cadastro de cliente"
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
+            Lojas e vendedores são criados vazios — adicione no Cadastro depois.
+          </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          <button
+            type="submit"
+            form="modal-form"
+            disabled={pending}
+            className="chip chip-mint text-[12px] px-3 py-1.5"
+          >
+            {pending ? "Criando…" : "Criar cliente"}
+          </button>
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         {err && (
           <div
             className="px-5 py-2 text-[12px]"
@@ -405,48 +405,19 @@ export function ClienteNovoModal({
           </label>
         </div>
 
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
-            Lojas e vendedores são criados vazios — adicione no Cadastro depois.
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={pending}
-              className="chip chip-mint text-[12px] px-3 py-1.5"
-            >
-              {pending ? "Criando…" : "Criar cliente"}
-            </button>
-          </div>
-        </div>
       </form>
-      <PasswordConfirm
-        open={confirmSuper !== null}
-        title="Criar cliente como superadmin"
-        message="Criar um cliente com privilégio de superadmin requer a senha do super atual (suporte). Digite-a pra confirmar."
-        pending={pending}
-        errorMessage={confirmSuper?.error ?? null}
-        onConfirm={(pw) => {
-          if (confirmSuper) runCreate(confirmSuper.payload, pw);
-        }}
-        onCancel={() => setConfirmSuper(null)}
-      />
-    </div>
+    </ModalShell>
+    <PasswordConfirm
+      open={confirmSuper !== null}
+      title="Criar cliente como superadmin"
+      message="Criar um cliente com privilégio de superadmin requer a senha do super atual (suporte). Digite-a pra confirmar."
+      pending={pending}
+      errorMessage={confirmSuper?.error ?? null}
+      onConfirm={(pw) => {
+        if (confirmSuper) runCreate(confirmSuper.payload, pw);
+      }}
+      onCancel={() => setConfirmSuper(null)}
+    />
+    </>
   );
 }

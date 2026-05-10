@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { and, count, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
-  automacoes,
   clientes,
+  clientesAutomacoes,
   emptyLoja,
   type Loja,
 } from "@/lib/db/schema";
@@ -205,16 +205,17 @@ export async function removeLojaAction(formData: FormData) {
   const lojas = await fetchLojas(session.clienteId);
   if (index < 0 || index >= lojas.length) throw new Error("Loja não encontrada.");
 
-  // Cascade guard: bloqueia se houver automações vinculadas à loja.
+  // Cascade guard: bloqueia se houver instâncias de automações
+  // vinculadas à loja.
   const target = lojas[index];
   if (target?.id) {
     const [autoCount] = await db
       .select({ n: count() })
-      .from(automacoes)
+      .from(clientesAutomacoes)
       .where(
         and(
-          eq(automacoes.clienteId, session.clienteId),
-          eq(automacoes.lojaId, target.id),
+          eq(clientesAutomacoes.clienteId, session.clienteId),
+          eq(clientesAutomacoes.lojaId, target.id),
         ),
       );
     const n = Number(autoCount?.n ?? 0);

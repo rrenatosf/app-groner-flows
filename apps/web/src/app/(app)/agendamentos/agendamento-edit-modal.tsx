@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import {
   updateAgendamentoFields,
   type UpdateAgendamentoPartial,
@@ -56,24 +58,32 @@ export function AgendamentoEditModal({
   const [dataAgendamento, setDataAgendamento] = useState<string>("");
   const [statusAgendamento, setStatusAgendamento] = useState<string>("");
   const [observacaoAgendamento, setObservacaoAgendamento] = useState<string>("");
+  const [initial, setInitial] = useState({
+    dataAgendamento: "",
+    statusAgendamento: "",
+    observacaoAgendamento: "",
+  });
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (open && target) {
       setErr(null);
-      setDataAgendamento(toLocalInputValue(target.dataAgendamento));
-      setStatusAgendamento(target.statusAgendamento ?? "");
-      setObservacaoAgendamento(target.observacaoAgendamento ?? "");
+      const next = {
+        dataAgendamento: toLocalInputValue(target.dataAgendamento),
+        statusAgendamento: target.statusAgendamento ?? "",
+        observacaoAgendamento: target.observacaoAgendamento ?? "",
+      };
+      setDataAgendamento(next.dataAgendamento);
+      setStatusAgendamento(next.statusAgendamento);
+      setObservacaoAgendamento(next.observacaoAgendamento);
+      setInitial(next);
     }
   }, [open, target]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm(
+    initial,
+    { dataAgendamento, statusAgendamento, observacaoAgendamento },
+  );
 
   const pendencias = useMemo(
     () => (target ? pendenciasFor(target) : []),
@@ -110,67 +120,46 @@ export function AgendamentoEditModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[720px] max-h-[92vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between gap-3"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="label-eyebrow">
-              Agendamento {isSuper ? `· ${target.clienteNome ?? "—"}` : ""}
-              {pendencias.length > 0 && (
-                <span
-                  className="ml-2 px-1.5 rounded-full text-[10px]"
-                  style={{
-                    backgroundColor: "var(--rose-bg)",
-                    color: "var(--rose-300)",
-                    border: "1px solid var(--rose-border)",
-                  }}
-                >
-                  {pendencias.length} pendente
-                  {pendencias.length === 1 ? "" : "s"}
-                </span>
-              )}
-            </div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)] truncate">
-              {target.leadNome ?? `Lead #${target.leadId ?? "—"}`}
-            </h2>
-            {target.leadTelefone && (
-              <p className="text-[12px] text-[color:var(--fg-subtle)] mt-0.5 numerics">
-                {target.leadTelefone}
-              </p>
-            )}
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow={`Agendamento${isSuper ? ` · ${target.clienteNome ?? "—"}` : ""}${pendencias.length > 0 ? ` · ${pendencias.length} pendente${pendencias.length === 1 ? "" : "s"}` : ""}${target.leadTelefone ? ` · ${target.leadTelefone}` : ""}`}
+      title={target.leadNome ?? `Lead #${target.leadId ?? "—"}`}
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
+            id: {target.id}
+          </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          {canEdit && (
+            <button
+              type="submit"
+              form="modal-form"
+              disabled={pending}
+              className="chip chip-mint text-[12px] px-3 py-1.5"
+            >
+              {pending ? "Salvando…" : "Salvar"}
+            </button>
+          )}
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         {err && (
           <div
             className="px-5 py-2 text-[12px]"
@@ -277,40 +266,8 @@ export function AgendamentoEditModal({
           </section>
         </div>
 
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
-            id: {target.id}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
-            >
-              Cancelar
-            </button>
-            {canEdit && (
-              <button
-                type="submit"
-                disabled={pending}
-                className="chip chip-mint text-[12px] px-3 py-1.5"
-              >
-                {pending ? "Salvando…" : "Salvar"}
-              </button>
-            )}
-          </div>
-        </div>
       </form>
-    </div>
+    </ModalShell>
   );
 }
 

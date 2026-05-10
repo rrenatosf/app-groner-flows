@@ -1,39 +1,37 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { SearchableSelect } from "@/components/data-table";
+import { JsonValidationModal } from "@/components/data-table";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import {
-  deleteAutomacao,
-  updateAutomacaoConfiguracoes,
-  updateAutomacaoFields,
-  type UpdateAutomacaoPartial,
+  deleteCatalogoAutomacao,
+  updateCatalogoAutomacaoFields,
+  updateTemplateConfiguracoes,
+  type UpdateCatalogoAutomacaoPartial,
 } from "./actions";
 import {
   validateDadosConfiguracoes,
   getDefaultAutomacaoConfig,
 } from "./dados-config-shape";
-import type {
-  AutomacaoRowFull,
-  LojaOption,
-} from "./automacoes-table";
-import { pendenciasFor } from "./saude-automacao";
+import {
+  buildCatalogoValidation,
+  pendenciasCatalogoFor,
+  type CatalogoRow,
+} from "./saude-catalogo";
 
-type Tab = "dados" | "config" | "vinculo";
+type Tab = "dados" | "template" | "saude";
 
 export function AutomacaoEditModal({
   open,
   target,
-  isSuper,
   canEdit,
-  lojas,
   onClose,
 }: {
   open: boolean;
-  target: AutomacaoRowFull | null;
-  isSuper: boolean;
+  target: CatalogoRow | null;
   canEdit: boolean;
-  lojas: LojaOption[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -42,66 +40,55 @@ export function AutomacaoEditModal({
   const [tab, setTab] = useState<Tab>("dados");
   const [form, setForm] = useState<Record<string, string>>({});
   const [isActive, setIsActive] = useState(true);
-  const [lojaId, setLojaId] = useState<string | null>(null);
-  // Configurações (jsonb) — texto pretty-printed editável.
-  const [configText, setConfigText] = useState("[]");
-  const [configValid, setConfigValid] = useState(true);
-  const [configErr, setConfigErr] = useState<string | null>(null);
-  // Sinaliza que a automação tinha config vazia ao abrir o modal — usado pra
-  // mostrar hint no textarea ("template aplicado, clique salvar pra persistir").
-  const [wasEmptyOnOpen, setWasEmptyOnOpen] = useState(false);
+  // Template (jsonb) — texto pretty-printed editável.
+  const [templateText, setTemplateText] = useState("[]");
+  const [templateValid, setTemplateValid] = useState(true);
+  const [templateErr, setTemplateErr] = useState<string | null>(null);
+  const [validacaoOpen, setValidacaoOpen] = useState(false);
+  const [initialForm, setInitialForm] = useState<Record<string, string>>({});
+  const [initialIsActive, setInitialIsActive] = useState(true);
+  const [initialTemplate, setInitialTemplate] = useState("[]");
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (open && target) {
       setTab("dados");
       setErr(null);
-      setForm({
+      const next = {
         nome: target.nome ?? "",
         descricao: target.descricao ?? "",
         baseUrl: target.baseUrl ?? "",
         n8nWorkflowId: target.n8nWorkflowId ?? "",
         versao: target.versao ?? "",
-      });
+      };
+      setForm(next);
+      setInitialForm(next);
       setIsActive(!!target.isActive);
-      setLojaId(target.lojaId ?? null);
-      const cfg = Array.isArray(target.dadosConfiguracoes)
-        ? target.dadosConfiguracoes
+      setInitialIsActive(!!target.isActive);
+      const tpl = Array.isArray(target.dadosConfiguracoesTemplate)
+        ? target.dadosConfiguracoesTemplate
         : [];
-      // Migração transparente: se a automação está com config vazia (legado),
-      // popula textarea com template canônico já no abrir. NÃO grava no banco
-      // até o user clicar em Salvar — preservamos o gesto explícito.
-      const isEmpty = cfg.length === 0;
-      setWasEmptyOnOpen(isEmpty);
-      const initial = isEmpty ? getDefaultAutomacaoConfig() : cfg;
+      let tplText = "[]";
       try {
-        setConfigText(JSON.stringify(initial, null, 2));
+        tplText = JSON.stringify(tpl, null, 2);
       } catch {
-        setConfigText("[]");
+        tplText = "[]";
       }
-      setConfigValid(true);
-      setConfigErr(null);
+      setTemplateText(tplText);
+      setInitialTemplate(tplText);
+      setTemplateValid(true);
+      setTemplateErr(null);
     }
   }, [open, target]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  const pendencias = useMemo(
-    () => (target ? pendenciasFor(target) : []),
-    [target],
+  const isDirty = useDirtyForm(
+    { form: initialForm, isActive: initialIsActive, templateText: initialTemplate },
+    { form, isActive, templateText },
   );
 
-  // Lojas do mesmo cliente (única visão permitida pra trocar vínculo).
-  const lojasDoCliente = useMemo(
-    () =>
-      target ? lojas.filter((l) => l.clienteId === target.clienteId) : [],
-    [lojas, target],
+  const pendencias = useMemo(
+    () => (target ? pendenciasCatalogoFor(target) : []),
+    [target],
   );
 
   if (!open || !target) return null;
@@ -110,10 +97,10 @@ export function AutomacaoEditModal({
     setForm((prev) => ({ ...prev, [k]: v }));
   }
 
-  function validateConfig(): { ok: true; v: unknown } | { ok: false; error: string } {
+  function validateTemplate(): { ok: true; v: unknown } | { ok: false; error: string } {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(configText);
+      parsed = JSON.parse(templateText);
     } catch (e) {
       return {
         ok: false,
@@ -126,13 +113,13 @@ export function AutomacaoEditModal({
   }
 
   function handleValidateClick() {
-    const res = validateConfig();
+    const res = validateTemplate();
     if (!res.ok) {
-      setConfigValid(false);
-      setConfigErr(res.error);
+      setTemplateValid(false);
+      setTemplateErr(res.error);
     } else {
-      setConfigValid(true);
-      setConfigErr(null);
+      setTemplateValid(true);
+      setTemplateErr(null);
     }
   }
 
@@ -141,8 +128,7 @@ export function AutomacaoEditModal({
     if (!target) return;
     setErr(null);
 
-    // Salvar Dados (aba dados): nome/descricao/baseUrl/n8nWorkflowId/versao/isActive.
-    const patch: UpdateAutomacaoPartial = {
+    const patch: UpdateCatalogoAutomacaoPartial = {
       nome: form.nome ?? "",
       descricao: form.descricao || null,
       baseUrl: form.baseUrl || null,
@@ -150,41 +136,36 @@ export function AutomacaoEditModal({
       versao: form.versao || null,
       isActive,
     };
-    if (lojaId && lojaId !== target.lojaId) {
-      patch.lojaId = lojaId;
-    }
 
-    // Validar e salvar configurações também (se tab config tem JSON).
-    const cfgRes = validateConfig();
-    if (!cfgRes.ok) {
-      setTab("config");
-      setConfigValid(false);
-      setConfigErr(cfgRes.error);
-      setErr("Configurações inválidas — corrija antes de salvar.");
+    // Valida + salva template se houve mudança.
+    const tplRes = validateTemplate();
+    if (!tplRes.ok) {
+      setTab("template");
+      setTemplateValid(false);
+      setTemplateErr(tplRes.error);
+      setErr("Template inválido — corrija antes de salvar.");
       return;
     }
-    setConfigValid(true);
-    setConfigErr(null);
+    setTemplateValid(true);
+    setTemplateErr(null);
 
-    // Só dispara updateConfiguracoes se houve mudança real — evita
-    // write extra no Postgres + revalidatePath redundante.
-    const cfgPrev = JSON.stringify(target.dadosConfiguracoes ?? []);
-    const cfgNext = JSON.stringify(cfgRes.v);
-    const cfgChanged = cfgPrev !== cfgNext;
+    const tplPrev = JSON.stringify(target.dadosConfiguracoesTemplate ?? []);
+    const tplNext = JSON.stringify(tplRes.v);
+    const tplChanged = tplPrev !== tplNext;
 
     startTransition(async () => {
-      const res = await updateAutomacaoFields(target.id, patch);
+      const res = await updateCatalogoAutomacaoFields(target.id, patch);
       if (!res.ok) {
         setErr(res.error);
         return;
       }
-      if (cfgChanged) {
-        const cfgSave = await updateAutomacaoConfiguracoes(
+      if (tplChanged) {
+        const tplSave = await updateTemplateConfiguracoes(
           target.id,
-          cfgRes.v,
+          tplRes.v,
         );
-        if (!cfgSave.ok) {
-          setErr(cfgSave.error);
+        if (!tplSave.ok) {
+          setErr(tplSave.error);
           return;
         }
       }
@@ -196,11 +177,13 @@ export function AutomacaoEditModal({
   function handleDelete() {
     if (!target) return;
     if (
-      !confirm(`Remover a automação "${target.nome ?? "(sem nome)"}"?`)
+      !confirm(
+        `Apagar a automação "${target.nome ?? "(sem nome)"}" do catálogo?\n\nSe houver clientes usando, a operação é bloqueada.`,
+      )
     )
       return;
     startTransition(async () => {
-      const res = await deleteAutomacao(target.id);
+      const res = await deleteCatalogoAutomacao(target.id);
       if (!res.ok) {
         setErr(res.error);
         return;
@@ -211,50 +194,56 @@ export function AutomacaoEditModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[820px] max-h-[92vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between gap-3"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="label-eyebrow">
-              Automação{" "}
-              {isSuper ? `· ${target.clienteNome ?? "—"}` : ""}
-            </div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)] truncate">
-              {target.nome ?? "(sem nome)"}
-            </h2>
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow={`Catálogo de automação${target.versao ? ` · v${target.versao}` : ""}`}
+      title={target.nome ?? "(sem nome)"}
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
+            id: {target.id}
+          </span>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={pending}
+              className="btn-danger"
+            >
+              Apagar
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="btn-ghost"
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          {canEdit && (
+            <button
+              type="submit"
+              form="modal-form"
+              disabled={pending || !templateValid}
+              className="btn-primary"
+              title={
+                !templateValid
+                  ? "Validar template antes de salvar"
+                  : undefined
+              }
+            >
+              {pending ? "Salvando…" : "Salvar"}
+            </button>
+          )}
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         <div
           className="px-5 pt-3 flex items-center gap-1"
           style={{ borderBottom: "1px solid var(--b-soft)" }}
@@ -275,11 +264,11 @@ export function AutomacaoEditModal({
             )}
           </TabButton>
           <TabButton
-            active={tab === "config"}
-            onClick={() => setTab("config")}
+            active={tab === "template"}
+            onClick={() => setTab("template")}
           >
-            Configurações
-            {!configValid && (
+            Template
+            {!templateValid && (
               <span
                 className="ml-1.5 px-1.5 rounded-full text-[10px]"
                 style={{
@@ -293,10 +282,10 @@ export function AutomacaoEditModal({
             )}
           </TabButton>
           <TabButton
-            active={tab === "vinculo"}
-            onClick={() => setTab("vinculo")}
+            active={tab === "saude"}
+            onClick={() => setTab("saude")}
           >
-            Vínculo
+            Saúde
           </TabButton>
         </div>
 
@@ -362,51 +351,44 @@ export function AutomacaoEditModal({
                 className="accent-[color:var(--mint-300)]"
               />
               <span className="text-[12.5px] text-[color:var(--fg-muted)]">
-                Automação ativa
+                Disponível pra novos clientes (catálogo ativo)
               </span>
             </label>
           </div>
         )}
 
-        {tab === "config" && (
+        {tab === "template" && (
           <div className="p-5 space-y-2">
+            <div
+              className="text-[11px] px-3 py-2 rounded-md"
+              style={{
+                backgroundColor: "var(--ink-3)",
+                color: "var(--fg-muted)",
+                border: "1px solid var(--b-base)",
+              }}
+            >
+              <strong style={{ color: "var(--amber-300)" }}>
+                Aviso:
+              </strong>{" "}
+              Editar o template aqui não afeta clientes que já têm essa
+              automação atribuída. Atinge apenas instâncias futuras.
+            </div>
             <label className="flex flex-col gap-1">
               <span className="text-[11px] uppercase tracking-wider text-[color:var(--fg-subtle)]">
-                Configurações (JSON — array de objetos com 1 chave por
-                grupo)
+                Template (JSON — array de objetos com 1 chave por grupo)
               </span>
-              {wasEmptyOnOpen && (
-                <div
-                  className="text-[11px] px-3 py-2 rounded-md"
-                  style={{
-                    backgroundColor: "var(--ink-3)",
-                    color: "var(--fg-muted)",
-                    border: "1px solid var(--b-base)",
-                  }}
-                >
-                  <span aria-hidden style={{ color: "var(--mint-300)" }}>✓</span>{" "}
-                  Template aplicado automaticamente — config estava vazia.
-                  Clique Salvar pra persistir.
-                </div>
-              )}
               <textarea
-                value={configText}
+                value={templateText}
                 onChange={(e) => {
-                  setConfigText(e.target.value);
-                  setConfigValid(true);
-                  setConfigErr(null);
+                  setTemplateText(e.target.value);
+                  setTemplateValid(true);
+                  setTemplateErr(null);
                 }}
                 disabled={pending || !canEdit}
                 rows={18}
                 spellCheck={false}
-                className="text-[12.5px] px-2.5 py-1.5 rounded-md"
+                className={`input-edit${templateValid ? "" : " is-error"}`}
                 style={{
-                  backgroundColor: "var(--ink-3)",
-                  border: configValid
-                    ? "1px solid var(--b-soft)"
-                    : "1px solid var(--rose-border)",
-                  color: "var(--fg)",
-                  outline: "none",
                   resize: "vertical",
                   fontFamily:
                     "var(--font-geist-mono), ui-monospace, monospace",
@@ -418,37 +400,31 @@ export function AutomacaoEditModal({
             </label>
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] text-[color:var(--fg-subtle)]">
-                Template padrão tem 3 grupos: dados_de_configuração,
-                coluna_inicial, coluna_qualificacao. Cada item: objeto com 1
-                chave (nome do grupo) e valor objeto.
+                Template canônico tem 3 grupos: dados_de_configuração,
+                coluna_inicial, coluna_qualificacao.
               </p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    const trimmed = configText.trim();
+                    const trimmed = templateText.trim();
                     const isEmpty = trimmed === "" || trimmed === "[]";
                     if (!isEmpty) {
                       if (
                         !confirm(
-                          "Substituir configuração atual pelo template padrão?",
+                          "Substituir template atual pelo padrão?",
                         )
                       )
                         return;
                     }
-                    setConfigText(
+                    setTemplateText(
                       JSON.stringify(getDefaultAutomacaoConfig(), null, 2),
                     );
-                    setConfigValid(true);
-                    setConfigErr(null);
+                    setTemplateValid(true);
+                    setTemplateErr(null);
                   }}
                   disabled={pending || !canEdit}
-                  className="text-[12px] px-3 py-1.5 rounded-md"
-                  style={{
-                    backgroundColor: "var(--ink-3)",
-                    color: "var(--fg-muted)",
-                    border: "1px solid var(--b-soft)",
-                  }}
+                  className="btn-ghost"
                 >
                   Aplicar template padrão
                 </button>
@@ -456,18 +432,13 @@ export function AutomacaoEditModal({
                   type="button"
                   onClick={handleValidateClick}
                   disabled={pending}
-                  className="text-[12px] px-3 py-1.5 rounded-md"
-                  style={{
-                    backgroundColor: "var(--ink-3)",
-                    color: "var(--fg-muted)",
-                    border: "1px solid var(--b-soft)",
-                  }}
+                  className="btn-ghost"
                 >
                   Validar
                 </button>
               </div>
             </div>
-            {!configValid && configErr && (
+            {!templateValid && templateErr && (
               <div
                 className="text-[12px] px-3 py-2 rounded-md"
                 style={{
@@ -476,104 +447,51 @@ export function AutomacaoEditModal({
                   border: "1px solid var(--rose-border)",
                 }}
               >
-                {configErr}
-              </div>
-            )}
-            {configValid && configErr === null && (
-              <div
-                className="text-[11px] px-3 py-2 rounded-md"
-                style={{
-                  backgroundColor: "var(--ink-3)",
-                  color: "var(--fg-muted)",
-                  border: "1px solid var(--b-base)",
-                }}
-              >
-                <span aria-hidden style={{ color: "var(--mint-300)" }}>i</span>{" "}
-                Use "Validar" pra checar o shape do JSON antes de salvar. Shape inválido bloqueia o save.
+                {templateErr}
               </div>
             )}
           </div>
         )}
 
-        {tab === "vinculo" && (
-          <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 sm:col-span-2">
-              <span className="text-[11px] uppercase tracking-wider text-[color:var(--fg-subtle)]">
-                Loja vinculada *
-              </span>
-              <SearchableSelect<LojaOption, string>
-                items={lojasDoCliente}
-                value={lojaId}
-                onChange={setLojaId}
-                getKey={(l) => l.id}
-                getLabel={(l) => l.nome}
-                placeholder="Selecione a loja"
-                searchPlaceholder="Buscar loja..."
-                disabled={pending || !canEdit}
-                width={400}
-              />
-              <p className="text-[11px] text-[color:var(--fg-subtle)] mt-0.5">
-                Apenas lojas do mesmo cliente. Trocar de cliente exige criar
-                automação nova.
-              </p>
-            </label>
-            <div className="sm:col-span-2 grid grid-cols-2 gap-3 mt-2">
-              <InfoBlock label="Cliente" value={target.clienteNome ?? "—"} />
-              <InfoBlock label="ID" value={String(target.id)} />
+        {tab === "saude" && (
+          <div className="p-5 space-y-3">
+            <div className="text-[12px] text-[color:var(--fg-muted)]">
+              Diagnóstico do catálogo. Use o botão abaixo pra abrir a
+              validação detalhada (campos esperados vs atuais).
             </div>
-          </div>
-        )}
-
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
-            id: {target.id}
-          </span>
-          <div className="flex items-center gap-2">
-            {canEdit && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={pending}
-                className="chip chip-red text-[12px] px-3 py-1.5"
-              >
-                Remover
-              </button>
-            )}
             <button
               type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
+              onClick={() => setValidacaoOpen(true)}
+              className="btn-ghost"
             >
-              Cancelar
+              Abrir validação JSON
             </button>
-            {canEdit && (
-              <button
-                type="submit"
-                disabled={pending || !configValid}
-                className="chip chip-mint text-[12px] px-3 py-1.5"
-                style={{ opacity: configValid ? 1 : 0.5 }}
-                title={
-                  !configValid
-                    ? "Validar configurações antes de salvar"
-                    : undefined
-                }
+            {pendencias.length > 0 && (
+              <div
+                className="text-[12px] px-3 py-2 rounded-md"
+                style={{
+                  backgroundColor: "var(--rose-bg)",
+                  color: "var(--rose-300)",
+                  border: "1px solid var(--rose-border)",
+                }}
               >
-                {pending ? "Salvando…" : "Salvar"}
-              </button>
+                Pendências críticas:{" "}
+                {pendencias.map((p) => p.label).join(", ")}.
+              </div>
             )}
           </div>
-        </div>
+        )}
+
       </form>
-    </div>
+
+      <JsonValidationModal
+        open={validacaoOpen}
+        title={`Catálogo: ${target.nome ?? "(sem nome)"}`}
+        subtitle={`id ${target.id}${target.versao ? ` · v${target.versao}` : ""}`}
+        fields={buildCatalogoValidation(target)}
+        onClose={() => setValidacaoOpen(false)}
+      />
+    </ModalShell>
   );
 }
 
@@ -631,31 +549,8 @@ function FieldText({
         value={form[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
         disabled={pending}
-        className="text-[13px] px-2.5 py-1.5 rounded-md"
-        style={{
-          backgroundColor: "var(--ink-3)",
-          border: "1px solid var(--b-soft)",
-          color: "var(--fg)",
-          outline: "none",
-        }}
+        className="input-edit"
       />
     </label>
-  );
-}
-
-function InfoBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="rounded-md p-3"
-      style={{
-        backgroundColor: "var(--ink-3)",
-        border: "1px solid var(--b-soft)",
-      }}
-    >
-      <div className="label-eyebrow">{label}</div>
-      <div className="text-[13px] mt-1 numerics text-[color:var(--fg)]">
-        {value}
-      </div>
-    </div>
   );
 }

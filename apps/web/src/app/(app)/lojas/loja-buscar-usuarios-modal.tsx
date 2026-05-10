@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ModalShell } from "@/components/modal-shell";
 import { fetchCrmUsuariosForClienteAction } from "@/server/actions/cliente-crm";
 import { createVendedorTyped } from "../usuarios/actions";
 import type { LojaRow } from "./lojas-table";
@@ -53,15 +54,6 @@ export function LojaBuscarUsuariosModal({
       setUsuarios(res.usuarios);
     });
   }, [open, target]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
 
   function toggle(uid: number) {
     setPicked((prev) => {
@@ -119,49 +111,51 @@ export function LojaBuscarUsuariosModal({
   if (!open || !target) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <div
-        className="w-full max-w-[860px] max-h-[92vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div>
-            <div className="label-eyebrow">CRM</div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)]">
-              Buscar usuários da loja "{target.loja.nome ?? "(sem nome)"}"
-            </h2>
-            <p className="text-[12px] text-[color:var(--fg-subtle)] mt-1">
-              Importa pra tabela de Usuários, vinculados a esta loja.
-              Cliente: {target.clienteNome ?? "—"}.
-            </p>
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow="CRM"
+      title={`Buscar usuários da loja "${target.loja.nome ?? "(sem nome)"}"`}
+      size="full"
+      isDirty={picked.size > 0}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pendingImport}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
           >
-            ✕
+            Fechar
           </button>
-        </div>
+          <button
+            type="button"
+            onClick={importSelected}
+            disabled={
+              pendingImport || picked.size === 0 || !defaultPassword
+            }
+            className="chip chip-mint text-[12px] px-3 py-1.5"
+            style={{
+              opacity:
+                picked.size === 0 || !defaultPassword ? 0.5 : 1,
+            }}
+          >
+            {pendingImport
+              ? "Importando…"
+              : `Importar selecionados${picked.size > 0 ? ` (${picked.size})` : ""}`}
+          </button>
+        </>
+      }
+    >
+        <p className="text-[12px] text-[color:var(--fg-subtle)] px-5 pt-3">
+          Importa pra tabela de Usuários, vinculados a esta loja.
+          Cliente: {target.clienteNome ?? "—"}.
+        </p>
 
         {pendingFetch && (
           <div className="p-5 text-center text-[13px] text-[color:var(--fg-muted)]">
@@ -349,41 +343,6 @@ export function LojaBuscarUsuariosModal({
           </div>
         )}
 
-        <div
-          className="px-5 py-3 flex items-center justify-end gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pendingImport}
-            className="text-[12px] px-3 py-1.5 rounded-md"
-            style={{
-              backgroundColor: "var(--ink-3)",
-              color: "var(--fg-muted)",
-              border: "1px solid var(--b-soft)",
-            }}
-          >
-            Fechar
-          </button>
-          <button
-            type="button"
-            onClick={importSelected}
-            disabled={
-              pendingImport || picked.size === 0 || !defaultPassword
-            }
-            className="chip chip-mint text-[12px] px-3 py-1.5"
-            style={{
-              opacity:
-                picked.size === 0 || !defaultPassword ? 0.5 : 1,
-            }}
-          >
-            {pendingImport
-              ? "Importando…"
-              : `Importar selecionados${picked.size > 0 ? ` (${picked.size})` : ""}`}
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ModalShell } from "@/components/modal-shell";
 import { updateAgenteFields } from "./actions";
 import type { AgenteRowFull } from "./agentes-table";
 
@@ -23,7 +24,7 @@ export function AgentePromptModal({
   const [err, setErr] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [wrap, setWrap] = useState(false);
+  const [wrap, setWrap] = useState(true);
 
   useEffect(() => {
     if (open && target) {
@@ -32,15 +33,6 @@ export function AgentePromptModal({
       setErr(null);
     }
   }, [open, target]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
 
   if (!open || !target) return null;
 
@@ -104,196 +96,148 @@ export function AgentePromptModal({
     });
   }
 
-  function maybeClose() {
-    if (
-      dirty &&
-      !confirm("Você tem alterações não salvas. Descartar e fechar?")
-    )
-      return;
-    onClose();
-  }
-
   const lineCount = text.split("\n").length;
   const charCount = text.length;
 
   return (
-    <div
-      className="fixed inset-0 z-[55] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) maybeClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <div
-        className="w-full max-w-[1200px] flex flex-col rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-          height: "92vh",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between gap-3"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="label-eyebrow">
-              Prompt · {target.clienteNome ?? target.clienteTenant ?? "—"}
-            </div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)] truncate">
-              {target.name ?? "(sem nome)"}
-            </h2>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2 text-[11px] text-[color:var(--fg-subtle)] numerics">
-              <span>{lineCount} linhas</span>
-              <span>·</span>
-              <span>{charCount} chars</span>
-              {dirty && (
-                <span style={{ color: "var(--amber-300)" }}>· não salvo</span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setWrap((s) => !s)}
-              aria-label="Alternar quebra de linha"
-              title={wrap ? "Desativar quebra de linha" : "Ativar quebra de linha"}
-              className="inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded transition-colors"
-              style={{
-                backgroundColor: "transparent",
-                color: wrap ? "var(--mint-300)" : "var(--fg-subtle)",
-                border: "1px solid var(--b-soft)",
-                lineHeight: 1,
-              }}
-            >
-              <span>quebrar</span>
-              <span
-                aria-hidden
-                style={{
-                  position: "relative",
-                  display: "inline-block",
-                  width: 18,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: wrap
-                    ? "var(--mint-700)"
-                    : "rgba(255,255,255,0.10)",
-                  border: `1px solid ${
-                    wrap
-                      ? "var(--mint-600)"
-                      : "rgba(255,255,255,0.18)"
-                  }`,
-                  transition: "background-color 160ms ease",
-                }}
-              >
-                <span
-                  style={{
-                    position: "absolute",
-                    top: 1,
-                    left: wrap ? 9 : 1,
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: wrap
-                      ? "var(--mint-100)"
-                      : "rgba(255,255,255,0.65)",
-                    transition: "left 160ms ease",
-                  }}
-                />
-              </span>
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={maybeClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
-          >
-            ✕
-          </button>
-        </div>
-
-        {err && (
-          <div
-            className="px-5 py-2 text-[12px]"
-            style={{
-              backgroundColor: "var(--amber-bg)",
-              color: "var(--amber-300)",
-              borderBottom: "1px solid var(--amber-border)",
-            }}
-          >
-            {err}
-          </div>
-        )}
-
-        <div className="flex-1 p-5 overflow-hidden flex flex-col">
-          <textarea
-            value={text}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleTab}
-            disabled={pending || !canEdit}
-            spellCheck={false}
-            wrap={wrap ? "soft" : "off"}
-            placeholder="identidade_agente: |&#10;  - Você é um SDR..."
-            className="flex-1 text-[13px] px-3 py-2 rounded-md w-full"
-            style={{
-              backgroundColor: "var(--ink-3)",
-              border: "1px solid var(--b-soft)",
-              color: "var(--fg)",
-              outline: "none",
-              resize: "none",
-              fontFamily:
-                "var(--font-geist-mono), ui-monospace, monospace",
-              lineHeight: "1.7",
-              tabSize: 2,
-              whiteSpace: wrap ? "pre-wrap" : "pre",
-              wordBreak: wrap ? "break-word" : "normal",
-              overflow: "auto",
-            }}
-          />
-        </div>
-
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow={`Prompt · ${target.clienteNome ?? target.clienteTenant ?? "—"}`}
+      title={target.name ?? "(sem nome)"}
+      size="full"
+      zIndex={55}
+      isDirty={dirty}
+      onSubmit={canEdit ? save : undefined}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
             Tab indenta 2 espaços · Shift+Tab dedenta · Esc fecha
           </span>
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
+          >
+            {canEdit ? "Cancelar" : "Fechar"}
+          </button>
+          {canEdit && (
             <button
               type="button"
-              onClick={maybeClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
+              onClick={save}
+              disabled={pending || !dirty}
+              className="chip chip-mint text-[12px] px-3 py-1.5"
+              style={{ opacity: !dirty ? 0.5 : 1 }}
             >
-              {canEdit ? "Cancelar" : "Fechar"}
+              {pending ? "Salvando…" : "Salvar"}
             </button>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={save}
-                disabled={pending || !dirty}
-                className="chip chip-mint text-[12px] px-3 py-1.5"
-                style={{ opacity: !dirty ? 0.5 : 1 }}
-              >
-                {pending ? "Salvando…" : "Salvar"}
-              </button>
-            )}
-          </div>
+          )}
+        </>
+      }
+    >
+      <div
+        className="px-5 pt-3 pb-2 flex items-center justify-end gap-3"
+      >
+        <div className="flex items-center gap-2 text-[11px] text-[color:var(--fg-subtle)] numerics">
+          <span>{lineCount} linhas</span>
+          <span>·</span>
+          <span>{charCount} chars</span>
         </div>
+        <button
+          type="button"
+          onClick={() => setWrap((s) => !s)}
+          aria-label="Alternar quebra de linha"
+          title={wrap ? "Desativar quebra de linha" : "Ativar quebra de linha"}
+          className="inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded transition-colors"
+          style={{
+            backgroundColor: "transparent",
+            color: wrap ? "var(--mint-300)" : "var(--fg-subtle)",
+            border: "1px solid var(--b-soft)",
+            lineHeight: 1,
+          }}
+        >
+          <span>quebrar</span>
+          <span
+            aria-hidden
+            style={{
+              position: "relative",
+              display: "inline-block",
+              width: 18,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: wrap
+                ? "var(--mint-700)"
+                : "rgba(255,255,255,0.10)",
+              border: `1px solid ${
+                wrap ? "var(--mint-600)" : "rgba(255,255,255,0.18)"
+              }`,
+              transition: "background-color 160ms ease",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 1,
+                left: wrap ? 9 : 1,
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: wrap
+                  ? "var(--mint-100)"
+                  : "rgba(255,255,255,0.65)",
+                transition: "left 160ms ease",
+              }}
+            />
+          </span>
+        </button>
       </div>
-    </div>
+
+      {err && (
+        <div
+          className="mx-5 px-3 py-2 text-[12px] rounded"
+          style={{
+            backgroundColor: "var(--amber-bg)",
+            color: "var(--amber-300)",
+            border: "1px solid var(--amber-border)",
+          }}
+        >
+          {err}
+        </div>
+      )}
+
+      <div className="p-5 flex flex-col" style={{ minHeight: "60vh" }}>
+        <textarea
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleTab}
+          disabled={pending || !canEdit}
+          spellCheck={false}
+          wrap={wrap ? "soft" : "off"}
+          placeholder="identidade_agente: |&#10;  - Você é um SDR..."
+          className="flex-1 text-[13px] px-3 py-2 rounded-md w-full"
+          style={{
+            backgroundColor: "var(--ink-3)",
+            border: "1px solid var(--b-soft)",
+            color: "var(--fg)",
+            outline: "none",
+            resize: "none",
+            fontFamily:
+              "var(--font-geist-mono), ui-monospace, monospace",
+            lineHeight: "1.7",
+            tabSize: 2,
+            whiteSpace: wrap ? "pre-wrap" : "pre",
+            wordBreak: wrap ? "break-word" : "normal",
+            overflow: "auto",
+            minHeight: "55vh",
+          }}
+        />
+      </div>
+    </ModalShell>
   );
 }

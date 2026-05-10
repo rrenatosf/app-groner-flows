@@ -14,6 +14,8 @@ export {
   type ValidationField,
 } from "./json-validation-modal";
 export { SearchableSelect } from "./searchable-select";
+export { HealthToggle } from "./health-toggle";
+export { useHealthToggle } from "./use-health-toggle";
 export {
   IconCheck,
   IconCopy,

@@ -1,9 +1,10 @@
-import { AutomacoesTable, type LojaOption } from "../../../automacoes/automacoes-table";
 import {
-  loadAutomacoesFromCliente,
+  loadCatalogoAtivo,
   loadClienteOrForbid,
+  loadInstanciasFromCliente,
   loadLojasVisiveis,
 } from "../_data";
+import { ClienteAutomacoesTable } from "./cliente-automacoes-table";
 
 export default async function ClienteAutomacoesPage({
   params,
@@ -12,35 +13,37 @@ export default async function ClienteAutomacoesPage({
 }) {
   const { id } = await params;
   const clienteId = Number(id);
-  const { cliente, isSuper, session } = await loadClienteOrForbid(clienteId);
+  const { isSuper, session, cliente } = await loadClienteOrForbid(clienteId);
 
-  const rows = await loadAutomacoesFromCliente(clienteId);
-  const lojasVisiveis = await loadLojasVisiveis(clienteId);
+  const [rows, lojasVisiveis, catalogo] = await Promise.all([
+    loadInstanciasFromCliente(clienteId),
+    loadLojasVisiveis(clienteId),
+    loadCatalogoAtivo(),
+  ]);
 
   // Super sempre edita; cliente kind=cliente edita; vendedor read-only.
   const canEdit = isSuper || session.kind === "cliente";
 
-  // Lojas pickers — só do próprio cliente, filtradas pelo caller.
-  const lojas: LojaOption[] = lojasVisiveis.map((l) => ({
+  const lojas = lojasVisiveis.map((l) => ({
     id: l.id,
     nome: l.nome,
-    clienteId,
+    crm_id: l.crm_id ?? null,
   }));
-
-  // Auto-seleciona o cliente do drilldown no NovoModal.
-  const clientesPicker = [
-    { id: cliente.id, nome: cliente.nome ?? `Cliente #${cliente.id}` },
-  ];
 
   return (
     <div>
-      <AutomacoesTable
+      <ClienteAutomacoesTable
         rows={rows}
+        clienteId={clienteId}
+        cliente={{
+          crmTenant: cliente.crmTenant ?? null,
+          crmToken: cliente.crmToken ?? null,
+        }}
         isSuper={isSuper}
         canEdit={canEdit}
-        clientes={clientesPicker}
         lojas={lojas}
-        embedded
+        catalogo={catalogo}
+        crmColunas={cliente.crmStatusColunas}
       />
     </div>
   );

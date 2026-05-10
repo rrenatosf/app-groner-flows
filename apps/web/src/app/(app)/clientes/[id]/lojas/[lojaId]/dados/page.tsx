@@ -9,9 +9,21 @@ export default async function LojaDadosPage({
 }) {
   const { id, lojaId } = await params;
   const clienteId = Number(id);
-  const { isVendedor } = await loadClienteOrForbid(clienteId);
+  const { isVendedor, isSuper } = await loadClienteOrForbid(clienteId);
   const loja = await loadLoja(clienteId, lojaId);
-  // Vendedor (kind=usuario) é read-only.
-  const canEdit = !isVendedor;
-  return <LojaDadosForm clienteId={clienteId} loja={loja} canEdit={canEdit} />;
+  // Vendedor (kind=usuario) é read-only. Super edita tudo. Cliente comum
+  // edita só endereço + regras (campos sensíveis tipo nome/CRM ID/CNPJ
+  // ficam travados pra evitar quebrar workflow N8N e CRM externo).
+  const editScope: "all" | "endereco-regras" | "none" = isVendedor
+    ? "none"
+    : isSuper
+      ? "all"
+      : "endereco-regras";
+  return (
+    <LojaDadosForm
+      clienteId={clienteId}
+      loja={loja}
+      editScope={editScope}
+    />
+  );
 }

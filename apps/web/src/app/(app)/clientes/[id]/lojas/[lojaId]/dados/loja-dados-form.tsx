@@ -19,23 +19,19 @@ type Field = {
   label: string;
   type?: "text" | "number" | "tel";
   full?: boolean;
-  group: "info" | "endereco" | "agenda";
+  group: "identificacao" | "endereco" | "regras" | "agenda";
+  subgroup?: "duracao" | "janela";
   hint?: string;
+  legacyOnly?: boolean;
 };
 
 const FIELDS: Field[] = [
-  // Informações
-  { key: "nome", label: "Nome da loja", full: true, group: "info" },
-  { key: "crm_id", label: "CRM ID", group: "info" },
-  { key: "cnpj", label: "CNPJ", group: "info" },
-  { key: "telefone", label: "Telefone", type: "tel", group: "info" },
+  // Identificação
+  { key: "nome", label: "Nome da loja", full: true, group: "identificacao" },
+  { key: "crm_id", label: "CRM ID", group: "identificacao" },
+  { key: "cnpj", label: "CNPJ", group: "identificacao" },
+  { key: "telefone", label: "Telefone", type: "tel", group: "identificacao" },
   // Endereço
-  {
-    key: "endereco",
-    label: "Endereço (legado, único campo)",
-    full: true,
-    group: "endereco",
-  },
   { key: "endereco_cep", label: "CEP", group: "endereco" },
   { key: "endereco_rua", label: "Rua", group: "endereco" },
   { key: "endereco_numero", label: "Número", group: "endereco" },
@@ -48,70 +44,200 @@ const FIELDS: Field[] = [
     full: true,
     group: "endereco",
   },
-  // Agenda
+  {
+    key: "endereco",
+    label: "Endereço (legado, único campo)",
+    full: true,
+    group: "endereco",
+    legacyOnly: true,
+  },
+  // Regras de operação
   {
     key: "area_atuacao",
     label: "Área de atuação (km)",
     type: "number",
-    group: "agenda",
+    group: "regras",
     hint: "Raio em quilômetros que essa loja atende. Leads fora desse raio podem ser desqualificados por área de atuação.",
   },
   {
     key: "consumo_minimo",
     label: "Consumo mínimo",
     type: "number",
-    group: "agenda",
+    group: "regras",
     hint: "Consumo mínimo (em kWh) que o lead precisa ter pra qualificar nessa loja. Abaixo disso pode cair em desqualificação por consumo insuficiente.",
+  },
+  // Agenda — Duração e quantidade
+  {
+    key: "agenda_tempo_slots",
+    label: "Duração do slot (min)",
+    group: "agenda",
+    subgroup: "duracao",
+    hint: "Duração em minutos de cada bloco de horário. Ex: 60 = slots de 1h (09:00–10:00, 10:00–11:00...). Ex: 30 = slots de meia hora. Default 60.",
   },
   {
     key: "agenda_qtd_slotes",
     label: "Horários por turno",
     group: "agenda",
+    subgroup: "duracao",
     hint: "Quantos horários livres o sistema mostra dentro de cada turno sugerido. Ex: 3 = cada turno traz até 3 horários (09:00, 10:00, 11:00). Default 2.",
   },
   {
     key: "agenda_qtd_turnos",
     label: "Turnos sugeridos",
     group: "agenda",
+    subgroup: "duracao",
     hint: "Quantos turnos o sistema sugere quando o horário pedido não está disponível. Ex: 3 = sugere até 3 blocos (Hoje Tarde, Amanhã Manhã, Amanhã Tarde). Default 2.",
   },
+  // Agenda — Janela e limites
   {
     key: "agenda_dias_frente",
     label: "Dias à frente (busca)",
     group: "agenda",
+    subgroup: "janela",
     hint: "Janela de busca: quantos dias à frente da data pedida o sistema vasculha vagas. Ex: 4 = se lead pediu segunda, busca de segunda até sexta. Default 1.",
-  },
-  {
-    key: "agenda_tempo_slots",
-    label: "Duração do slot (min)",
-    group: "agenda",
-    hint: "Duração em minutos de cada bloco de horário. Ex: 60 = slots de 1h (09:00–10:00, 10:00–11:00...). Ex: 30 = slots de meia hora. Default 60.",
   },
   {
     key: "agenda_max_dias_fente",
     label: "Limite máx. (min)",
     group: "agenda",
+    subgroup: "janela",
     hint: "Limite máximo absoluto em minutos no futuro que aceita agendar. Pedidos acima disso são recusados como 'fora_do_limite'. Default 20160 (≈14 dias).",
   },
   {
     key: "agenda_tempo_antecessor",
     label: "Antecedência mínima (min)",
     group: "agenda",
+    subgroup: "janela",
     hint: "Tempo mínimo em minutos entre agora e o horário a marcar. Impede o lead marcar 'pra daqui a 10 minutos'. Ex: 120 = se agora 14:00, primeiro horário válido é 16:00. Default 120.",
   },
   {
     key: "agenda_tempo_antecedencia",
     label: "Distância p/ sugerir antes (min)",
     group: "agenda",
+    subgroup: "janela",
     hint: "Distância mínima em minutos entre agora e o horário pedido pra o sistema poder sugerir horários ANTERIORES ao solicitado. Evita sugerir 'antes' quando o pedido já tá próximo. Default 120.",
   },
 ];
 
-const GROUPS: { id: Field["group"]; label: string }[] = [
-  { id: "info", label: "Informações" },
-  { id: "endereco", label: "Endereço" },
-  { id: "agenda", label: "Configuração e agenda" },
+const GROUPS = [
+  {
+    id: "identificacao" as const,
+    label: "Identificação",
+    subtitle: "Quem é a loja",
+  },
+  {
+    id: "endereco" as const,
+    label: "Endereço",
+    subtitle: "Localização física",
+  },
+  {
+    id: "regras" as const,
+    label: "Regras de operação",
+    subtitle: "Critérios de qualificação de leads",
+  },
+  {
+    id: "agenda" as const,
+    label: "Configurações de agenda",
+    subtitle: "Como o sistema sugere horários",
+    subgroups: [
+      { id: "duracao" as const, label: "Duração e quantidade" },
+      { id: "janela" as const, label: "Janela e limites" },
+    ],
+  },
 ];
+
+type EditScope = "all" | "endereco-regras" | "none";
+
+function isFieldEditable(group: Field["group"], scope: EditScope): boolean {
+  if (scope === "all") return true;
+  if (scope === "endereco-regras")
+    return group === "endereco" || group === "regras";
+  return false;
+}
+
+function FieldRow({
+  f,
+  value,
+  isPendente,
+  onChange,
+  pending,
+  editScope,
+}: {
+  f: Field;
+  value: string;
+  isPendente: boolean;
+  onChange: (v: string) => void;
+  pending: boolean;
+  editScope: EditScope;
+}) {
+  const readonly = !!f.legacyOnly || !isFieldEditable(f.group, editScope);
+  const disabled = pending || !isFieldEditable(f.group, editScope) || readonly;
+  return (
+    <label
+      className={`flex flex-col gap-1 ${f.full ? "sm:col-span-2" : ""}`}
+      title={f.hint}
+    >
+      <span
+        className="text-[11px] uppercase tracking-wider flex items-center gap-1.5"
+        style={{ color: "var(--fg-subtle)" }}
+      >
+        <span>{f.label}</span>
+        {f.hint && (
+          <span
+            aria-label={f.hint}
+            title={f.hint}
+            className="inline-flex items-center justify-center select-none"
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: "50%",
+              border: "1px solid var(--b-base)",
+              color: "var(--fg-muted)",
+              fontSize: 9,
+              fontStyle: "italic",
+              fontWeight: 600,
+              lineHeight: 1,
+            }}
+          >
+            i
+          </span>
+        )}
+        {isPendente && (
+          <span
+            aria-hidden
+            title="Pendente"
+            className="size-1.5 rounded-full"
+            style={{ backgroundColor: "var(--rose-300)" }}
+          />
+        )}
+        {f.legacyOnly && (
+          <span
+            className="text-[9.5px] uppercase tracking-wider"
+            style={{ color: "var(--amber-300)" }}
+          >
+            legado
+          </span>
+        )}
+      </span>
+      <input
+        type={f.type ?? "text"}
+        min={f.type === "number" ? 0 : undefined}
+        step={f.type === "number" ? "any" : undefined}
+        inputMode={f.type === "number" ? "decimal" : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled && !readonly}
+        readOnly={readonly}
+        title={f.hint}
+        className={
+          readonly
+            ? "input-readonly"
+            : `input-edit${isPendente ? " is-error" : ""}`
+        }
+      />
+    </label>
+  );
+}
 
 /**
  * Form da aba "Dados" da loja — adaptado de loja-edit-modal.tsx.
@@ -122,12 +248,14 @@ const GROUPS: { id: Field["group"]; label: string }[] = [
 export function LojaDadosForm({
   clienteId,
   loja,
-  canEdit,
+  editScope,
 }: {
   clienteId: number;
   loja: Loja;
-  canEdit: boolean;
+  editScope: EditScope;
 }) {
+  const canEditAny = editScope !== "none";
+  const canEditAll = editScope === "all";
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -247,7 +375,7 @@ export function LojaDadosForm({
         >
           <strong>Estrutura legada:</strong> esta loja tem {drift.length}{" "}
           campo{drift.length === 1 ? "" : "s"} fora do shape canonical.
-          {canEdit && (
+          {canEditAll && (
             <button
               type="button"
               onClick={handleApplyShape}
@@ -260,71 +388,74 @@ export function LojaDadosForm({
         </div>
       )}
 
-      {GROUPS.map((g) => (
-        <section key={g.id} className="space-y-2">
-          <h3 className="label-eyebrow">{g.label}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {FIELDS.filter((f) => f.group === g.id).map((f) => {
-              const isPendente = pendencias.some((p) => p.key === f.key);
-              const value = form[f.key as string] ?? "";
-              return (
-                <label
+      {GROUPS.map((g) => {
+        const groupFields = FIELDS.filter((f) => f.group === g.id);
+        // Esconde campo legado se vazio
+        const visibleFields = groupFields.filter(
+          (f) => !f.legacyOnly || ((form[f.key as string] ?? "").trim() !== "")
+        );
+        if (visibleFields.length === 0) return null;
+
+        // Agenda tem subgrupos
+        if (g.id === "agenda" && "subgroups" in g) {
+          return (
+            <section key={g.id} className="card-section card-section--accent">
+              <header className="card-section__header">
+                <div>
+                  <h3 className="card-section__title">{g.label}</h3>
+                  <span className="card-section__subtitle">{g.subtitle}</span>
+                </div>
+              </header>
+              {g.subgroups.map((sg, idx) => {
+                const sgFields = visibleFields.filter((f) => f.subgroup === sg.id);
+                if (sgFields.length === 0) return null;
+                return (
+                  <div key={sg.id} className={idx === 0 ? "" : "card-section__sub"}>
+                    <h4 className="card-section__sub-title">{sg.label}</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {sgFields.map((f) => (
+                        <FieldRow
+                          key={f.key as string}
+                          f={f}
+                          value={form[f.key as string] ?? ""}
+                          isPendente={pendencias.some((p) => p.key === f.key)}
+                          onChange={(v) => set(f.key as string, v)}
+                          pending={pending}
+                          editScope={editScope}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+          );
+        }
+
+        return (
+          <section key={g.id} className="card-section">
+            <header className="card-section__header">
+              <div>
+                <h3 className="card-section__title">{g.label}</h3>
+                <span className="card-section__subtitle">{g.subtitle}</span>
+              </div>
+            </header>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {visibleFields.map((f) => (
+                <FieldRow
                   key={f.key as string}
-                  className={`flex flex-col gap-1 ${f.full ? "sm:col-span-2" : ""}`}
-                >
-                  <span className="text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                    <span style={{ color: "var(--fg-subtle)" }}>{f.label}</span>
-                    {f.hint && (
-                      <span
-                        aria-label={f.hint}
-                        title={f.hint}
-                        className="inline-flex items-center justify-center cursor-help select-none"
-                        style={{
-                          width: 13,
-                          height: 13,
-                          borderRadius: "50%",
-                          border: "1px solid var(--b-base)",
-                          color: "var(--fg-muted)",
-                          fontSize: 9,
-                          fontStyle: "italic",
-                          fontWeight: 600,
-                          lineHeight: 1,
-                        }}
-                      >
-                        i
-                      </span>
-                    )}
-                    {isPendente && (
-                      <span
-                        aria-hidden
-                        title="Pendente"
-                        className="size-1.5 rounded-full"
-                        style={{ backgroundColor: "var(--rose-300)" }}
-                      />
-                    )}
-                  </span>
-                  <input
-                    type={f.type ?? "text"}
-                    value={value}
-                    onChange={(e) => set(f.key as string, e.target.value)}
-                    disabled={pending || !canEdit}
-                    title={f.hint}
-                    className="text-[13px] px-2.5 py-1.5 rounded-md"
-                    style={{
-                      backgroundColor: "var(--ink-3)",
-                      border: isPendente
-                        ? "1.5px solid var(--rose-border)"
-                        : "1px solid var(--b-soft)",
-                      color: "var(--fg)",
-                      outline: "none",
-                    }}
-                  />
-                </label>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+                  f={f}
+                  value={form[f.key as string] ?? ""}
+                  isPendente={pendencias.some((p) => p.key === f.key)}
+                  onChange={(v) => set(f.key as string, v)}
+                  pending={pending}
+                  editScope={editScope}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
 
       <div
         className="flex items-center justify-between gap-2 pt-3"
@@ -336,20 +467,20 @@ export function LojaDadosForm({
             : `${pendencias.length} pendência${pendencias.length === 1 ? "" : "s"}`}
         </span>
         <div className="flex items-center gap-2">
-          {canEdit && (
+          {canEditAll && (
             <button
               type="button"
               onClick={handleDelete}
               disabled={pending}
-              className="chip chip-red text-[12px] px-3 py-1.5"
+              className="btn-danger"
             >
               Remover loja
             </button>
           )}
           <button
             type="submit"
-            disabled={pending || !canEdit}
-            className="chip chip-mint text-[12px] px-3 py-1.5"
+            disabled={pending || !canEditAny}
+            className="btn-primary"
           >
             {pending ? "Salvando…" : "Salvar"}
           </button>

@@ -7,8 +7,10 @@ import {
   agentes,
   automacoes,
   clientes,
+  clientesAutomacoes,
   isPlaceholderLoja,
   isPlaceholderVendedor,
+  type Automacao,
   type Loja,
   type Vendedor,
 } from "@/lib/db/schema";
@@ -16,7 +18,7 @@ import { readSession } from "@/lib/auth/session";
 import { isSuperadminFresh } from "@/lib/auth/guard";
 import type { ClienteRow } from "../clientes-table";
 import type { AgenteRowFull } from "../../agentes/agentes-table";
-import type { AutomacaoRowFull } from "../../automacoes/automacoes-table";
+import type { InstanciaRowFull } from "../../automacoes/saude-instancia";
 
 export type ClienteDrilldownContext = {
   cliente: ClienteRow;
@@ -161,14 +163,12 @@ export const loadAgentesFromCliente = cache(
   },
 );
 
-/** Lista de automações do cliente, com lojaNome/clienteNome injetados.
- *  Vendedor (kind=usuario) só vê automações cuja `lojaId` esteja em
+/** Instâncias de automação do cliente (cliente_automacoes JOIN automacoes).
+ *  Vendedor (kind=usuario) só vê instâncias cuja `lojaId` esteja em
  *  `me.loja_ids`. Super/cliente admin vêem todas do tenant. */
-export const loadAutomacoesFromCliente = cache(
-  async (clienteId: number): Promise<AutomacaoRowFull[]> => {
+export const loadInstanciasFromCliente = cache(
+  async (clienteId: number): Promise<InstanciaRowFull[]> => {
     const ctx = await loadClienteOrForbid(clienteId);
-    const lojas = await loadLojasFromCliente(clienteId);
-    const lojasMap = new Map(lojas.map((l) => [l.id, l.nome]));
 
     let allowedLojaIds: Set<string> | null = null;
     if (ctx.isVendedor) {
@@ -178,54 +178,85 @@ export const loadAutomacoesFromCliente = cache(
     }
 
     const rows = await db
-      .select()
-      .from(automacoes)
-      .where(eq(automacoes.clienteId, clienteId))
+      .select({
+        id: clientesAutomacoes.id,
+        createdAt: clientesAutomacoes.createdAt,
+        automacaoId: clientesAutomacoes.automacaoId,
+        clienteId: clientesAutomacoes.clienteId,
+        lojaId: clientesAutomacoes.lojaId,
+        dadosConfiguracoes: clientesAutomacoes.dadosConfiguracoes,
+        isActive: clientesAutomacoes.isActive,
+        catalogoNome: automacoes.nome,
+        catalogoBaseUrl: automacoes.baseUrl,
+        catalogoWorkflowId: automacoes.n8nWorkflowId,
+        catalogoVersao: automacoes.versao,
+        catalogoTemplate: automacoes.dadosConfiguracoesTemplate,
+      })
+      .from(clientesAutomacoes)
+      .innerJoin(
+        automacoes,
+        eq(clientesAutomacoes.automacaoId, automacoes.id),
+      )
+      .where(eq(clientesAutomacoes.clienteId, clienteId))
       .orderBy(asc(automacoes.nome));
-    const filtered = allowedLojaIds
+
+    return allowedLojaIds
       ? rows.filter((r) => allowedLojaIds!.has(r.lojaId))
       : rows;
-    return filtered.map((a) => ({
-      ...a,
-      clienteNome: ctx.cliente.nome,
-      clienteTenant: ctx.cliente.crmTenant,
-      lojaNome: lojasMap.get(a.lojaId) ?? null,
-    }));
   },
 );
 
-/** Lista de automações de uma loja específica (gating de tenant +
- *  vendedor via `loadLojaOrNotFound`). */
-export const loadAutomacoesFromLoja = cache(
+/** Instâncias de uma loja específica (gating de tenant + vendedor via
+ *  `loadLojaOrNotFound`). */
+export const loadInstanciasFromLoja = cache(
   async (
     clienteId: number,
     lojaId: string,
-  ): Promise<AutomacaoRowFull[]> => {
-    const ctx = await loadClienteOrForbid(clienteId);
+  ): Promise<InstanciaRowFull[]> => {
+    await loadClienteOrForbid(clienteId);
     // loadLojaOrNotFound garante: loja existe, e (se vendedor) está
     // vinculada via loja_ids. Vendedor não-vinculado => notFound().
-    const loja = await loadLojaOrNotFound(clienteId, lojaId);
-    // Filtra por (clienteId, lojaId) direto no WHERE — defesa em
-    // profundidade contra colisão UUID v4 (negligenciável) e evita
-    // post-filter desnecessário.
+    await loadLojaOrNotFound(clienteId, lojaId);
     const rows = await db
-      .select()
-      .from(automacoes)
+      .select({
+        id: clientesAutomacoes.id,
+        createdAt: clientesAutomacoes.createdAt,
+        automacaoId: clientesAutomacoes.automacaoId,
+        clienteId: clientesAutomacoes.clienteId,
+        lojaId: clientesAutomacoes.lojaId,
+        dadosConfiguracoes: clientesAutomacoes.dadosConfiguracoes,
+        isActive: clientesAutomacoes.isActive,
+        catalogoNome: automacoes.nome,
+        catalogoBaseUrl: automacoes.baseUrl,
+        catalogoWorkflowId: automacoes.n8nWorkflowId,
+        catalogoVersao: automacoes.versao,
+        catalogoTemplate: automacoes.dadosConfiguracoesTemplate,
+      })
+      .from(clientesAutomacoes)
+      .innerJoin(
+        automacoes,
+        eq(clientesAutomacoes.automacaoId, automacoes.id),
+      )
       .where(
         and(
-          eq(automacoes.clienteId, clienteId),
-          eq(automacoes.lojaId, lojaId),
+          eq(clientesAutomacoes.clienteId, clienteId),
+          eq(clientesAutomacoes.lojaId, lojaId),
         ),
       )
       .orderBy(asc(automacoes.nome));
-    return rows.map((a) => ({
-      ...a,
-      clienteNome: ctx.cliente.nome,
-      clienteTenant: ctx.cliente.crmTenant,
-      lojaNome: loja.nome ?? null,
-    }));
+    return rows;
   },
 );
+
+/** Catálogo ativo (sem JOIN com clientes). Usado nos modais "Atribuir
+ *  automação" pra preencher SearchableSelect. */
+export const loadCatalogoAtivo = cache(async (): Promise<Automacao[]> => {
+  return db
+    .select()
+    .from(automacoes)
+    .where(eq(automacoes.isActive, true))
+    .orderBy(asc(automacoes.nome));
+});
 
 /** Resolve um vendedor específico (uid) dentro de um cliente. */
 export const loadVendedorOrNotFound = cache(

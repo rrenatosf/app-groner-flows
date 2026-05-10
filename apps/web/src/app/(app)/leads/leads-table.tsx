@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { SearchBox } from "@/components/search-box";
 import {
   ColumnPicker,
+  HealthToggle,
   IconCheck,
   IconInfo,
   IconWarn,
@@ -20,6 +21,7 @@ import {
   PAGE_SIZE_OPTIONS,
   SearchableSelect,
   TablePagination,
+  useHealthToggle,
   type PageSize,
 } from "@/components/data-table";
 import {
@@ -199,9 +201,13 @@ export function LeadsTable({
   embedded?: boolean;
 }) {
   const router = useRouter();
+  const { showHealth, setShowHealth } = useHealthToggle("leads");
   const visibleDefs = useMemo(
-    () => COLUMNS.filter((c) => !c.superOnly || isSuper),
-    [isSuper],
+    () =>
+      COLUMNS.filter((c) => !c.superOnly || isSuper).filter((c) =>
+        showHealth ? true : c.key !== "saude" && c.key !== "validacao",
+      ),
+    [isSuper, showHealth],
   );
   const visibleKeys = useMemo(() => visibleDefs.map((c) => c.key), [visibleDefs]);
 
@@ -574,7 +580,7 @@ export function LeadsTable({
                   >
                     {displayFor(r, d.key)}
                   </span>
-                  {isCellMissing(r, d.key) && (
+                  {showHealth && isCellMissing(r, d.key) && (
                     <span
                       title="Informação faltando"
                       aria-label="Informação faltando"
@@ -723,6 +729,7 @@ export function LeadsTable({
             onShowAll={() => persistHidden(new Set())}
             onHideAll={() => persistHidden(new Set(visibleKeys))}
           />
+          <HealthToggle value={showHealth} onChange={setShowHealth} />
           {isSuper && (
             <button
               type="button"

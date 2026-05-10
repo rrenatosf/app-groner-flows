@@ -58,6 +58,7 @@ export default async function LojaVendedoresPage({
         cliente.nome ?? cliente.crmTenant ?? `Cliente #${cliente.id}`
       }
       embeddedLojasDoCliente={lojasDoCliente}
+      embeddedLojaIdPreSelected={loja.id}
     />
   );
 }

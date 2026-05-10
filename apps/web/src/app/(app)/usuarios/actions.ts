@@ -155,6 +155,21 @@ export async function updateVendedorCell(
     return { ok: false, error: "Campo não editável." };
   }
 
+  // Validação: recebe_agendamento=true exige horários cadastrados.
+  if (key === "recebe_agendamento" && patch.recebe_agendamento === true) {
+    const h = vendedores[idx].horarios ?? {};
+    const temIntervalo = Object.values(h).some(
+      (arr) => Array.isArray(arr) && arr.length > 0,
+    );
+    if (!temIntervalo) {
+      return {
+        ok: false,
+        error:
+          'Configure ao menos 1 horário antes de marcar "Recebe agendamentos".',
+      };
+    }
+  }
+
   const next: Vendedor[] = vendedores.map((v, i) =>
     i === idx ? ({ ...v, ...patch } as Vendedor) : v,
   );
@@ -222,6 +237,24 @@ export async function updateVendedorFields(
   }
 
   if (Object.keys(writable).length === 0) return { ok: true };
+
+  // Validação: vendedor com `recebe_agendamento=true` exige pelo menos
+  // 1 intervalo cadastrado em algum dia. Bloqueia salvar pra evitar
+  // vendedor "ativo pra atendimento" sem janela disponível.
+  const merged = { ...vendedores[idx], ...writable } as Vendedor;
+  if (merged.recebe_agendamento === true) {
+    const h = merged.horarios ?? {};
+    const temIntervalo = Object.values(h).some(
+      (arr) => Array.isArray(arr) && arr.length > 0,
+    );
+    if (!temIntervalo) {
+      return {
+        ok: false,
+        error:
+          'Configure ao menos 1 horário antes de marcar "Recebe agendamentos". Use a aba Horários.',
+      };
+    }
+  }
 
   const next: Vendedor[] = vendedores.map((v, i) =>
     i === idx ? ({ ...v, ...writable } as Vendedor) : v,

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SearchableSelect } from "@/components/data-table";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import {
   updateLeadFields,
   type UpdateLeadPartial,
@@ -62,30 +64,47 @@ export function LeadEditModal({
   const [stepFollowup, setStepFollowup] = useState<string>("");
   const [statusFollowup, setStatusFollowup] = useState<string>("");
   const [proximoFollowup, setProximoFollowup] = useState<string>("");
+  const [initial, setInitial] = useState<{
+    vendedorId: number | null;
+    stepFollowup: string;
+    statusFollowup: string;
+    proximoFollowup: string;
+  }>({
+    vendedorId: null,
+    stepFollowup: "",
+    statusFollowup: "",
+    proximoFollowup: "",
+  });
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (open && target) {
       setTab("crm");
       setErr(null);
-      setVendedorId(target.vendedorId ?? null);
-      setStepFollowup(
+      const nextStep =
         target.stepFollowup !== null && target.stepFollowup !== undefined
           ? String(target.stepFollowup)
-          : "",
-      );
-      setStatusFollowup(target.statusFollowup ?? "");
-      setProximoFollowup(toLocalInputValue(target.proximoFollowup));
+          : "";
+      const nextStatus = target.statusFollowup ?? "";
+      const nextProx = toLocalInputValue(target.proximoFollowup);
+      const nextVendedor = target.vendedorId ?? null;
+      setVendedorId(nextVendedor);
+      setStepFollowup(nextStep);
+      setStatusFollowup(nextStatus);
+      setProximoFollowup(nextProx);
+      setInitial({
+        vendedorId: nextVendedor,
+        stepFollowup: nextStep,
+        statusFollowup: nextStatus,
+        proximoFollowup: nextProx,
+      });
     }
   }, [open, target]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm(
+    initial,
+    { vendedorId, stepFollowup, statusFollowup, proximoFollowup },
+  );
 
   const pendencias = useMemo(
     () => (target ? pendenciasFor(target) : []),
@@ -121,54 +140,41 @@ export function LeadEditModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[820px] max-h-[92vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between gap-3"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="label-eyebrow">
-              Lead {isSuper ? `· ${target.clienteNome ?? "—"}` : ""}
-            </div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)] truncate">
-              {target.nome ?? `Lead #${target.id}`}
-            </h2>
-            {target.telefone && (
-              <p className="text-[12px] text-[color:var(--fg-subtle)] mt-0.5 numerics">
-                {target.telefone}
-              </p>
-            )}
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow={`Lead${isSuper ? ` · ${target.clienteNome ?? "—"}` : ""}${target.telefone ? ` · ${target.telefone}` : ""}`}
+      title={target.nome ?? `Lead #${target.id}`}
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
+            id: {target.id}
+          </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="btn-ghost"
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          {canEdit && (
+            <button
+              type="submit"
+              form="modal-form"
+              disabled={pending}
+              className="btn-primary"
+            >
+              {pending ? "Salvando…" : "Salvar"}
+            </button>
+          )}
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         <div
           className="px-5 pt-3 flex items-center gap-1"
           style={{ borderBottom: "1px solid var(--b-soft)" }}
@@ -315,13 +321,7 @@ export function LeadEditModal({
                   value={stepFollowup}
                   onChange={(e) => setStepFollowup(e.target.value)}
                   disabled={!canEdit || pending}
-                  className="text-[13px] px-2.5 py-1.5 rounded-md numerics"
-                  style={{
-                    backgroundColor: "var(--ink-3)",
-                    border: "1px solid var(--b-soft)",
-                    color: "var(--fg)",
-                    outline: "none",
-                  }}
+                  className="input-edit numerics"
                 />
               </label>
               <label className="flex flex-col gap-1">
@@ -334,13 +334,7 @@ export function LeadEditModal({
                   onChange={(e) => setStatusFollowup(e.target.value)}
                   disabled={!canEdit || pending}
                   placeholder="Ex: aguardando, qualificado…"
-                  className="text-[13px] px-2.5 py-1.5 rounded-md"
-                  style={{
-                    backgroundColor: "var(--ink-3)",
-                    border: "1px solid var(--b-soft)",
-                    color: "var(--fg)",
-                    outline: "none",
-                  }}
+                  className="input-edit"
                 />
               </label>
               <label className="flex flex-col gap-1">
@@ -352,53 +346,15 @@ export function LeadEditModal({
                   value={proximoFollowup}
                   onChange={(e) => setProximoFollowup(e.target.value)}
                   disabled={!canEdit || pending}
-                  className="text-[13px] px-2.5 py-1.5 rounded-md numerics"
-                  style={{
-                    backgroundColor: "var(--ink-3)",
-                    border: "1px solid var(--b-soft)",
-                    color: "var(--fg)",
-                    outline: "none",
-                  }}
+                  className="input-edit numerics"
                 />
               </label>
             </section>
           </div>
         )}
 
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
-            id: {target.id}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
-            >
-              Cancelar
-            </button>
-            {canEdit && (
-              <button
-                type="submit"
-                disabled={pending}
-                className="chip chip-mint text-[12px] px-3 py-1.5"
-              >
-                {pending ? "Salvando…" : "Salvar"}
-              </button>
-            )}
-          </div>
-        </div>
       </form>
-    </div>
+    </ModalShell>
   );
 }
 

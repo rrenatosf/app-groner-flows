@@ -18,6 +18,7 @@ import {
   BooleanToggle,
   ColumnPicker,
   CopyButton,
+  HealthToggle,
   IconCheck,
   IconEye,
   IconEyeOff,
@@ -28,6 +29,7 @@ import {
   SearchableSelect,
   SecretActions,
   TablePagination,
+  useHealthToggle,
   type PageSize,
 } from "@/components/data-table";
 
@@ -274,11 +276,18 @@ export function ClientesTable({
   embedded?: boolean;
 }) {
   const router = useRouter();
+  const { showHealth, setShowHealth } = useHealthToggle("clientes");
 
   // Lista de colunas visíveis (filtra superOnly se não-super; remove
+  // colunas de saúde quando toggle está OFF — esconde saude/validacao/wa_status).
   const visibleDefs = useMemo(
-    () => COLUMNS.filter((c) => !c.superOnly || isSuper),
-    [isSuper],
+    () =>
+      COLUMNS.filter((c) => !c.superOnly || isSuper).filter((c) =>
+        showHealth
+          ? true
+          : c.key !== "saude" && c.key !== "validacao" && c.key !== "wa_status",
+      ),
+    [isSuper, showHealth],
   );
   const visibleKeys = useMemo(() => visibleDefs.map((c) => c.key), [visibleDefs]);
   const pickerDefs = visibleDefs;
@@ -828,6 +837,7 @@ export function ClientesTable({
             onShowAll={showAllCols}
             onHideAll={() => persistHidden(new Set(visibleKeys))}
           />
+          <HealthToggle value={showHealth} onChange={setShowHealth} />
           {isSuper && !embedded && (
             <button
               type="button"
@@ -1137,7 +1147,7 @@ export function ClientesTable({
                                 )}
                               </>
                             )}
-                            {isCellMissing(c, d.key) && (
+                            {showHealth && isCellMissing(c, d.key) && (
                               <span
                                 title="Informação faltando"
                                 aria-label="Informação faltando"

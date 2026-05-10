@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { ModalShell } from "@/components/modal-shell";
 import { IconCheck, IconWarn } from "./icons";
 
 export type ValidationField = {
@@ -38,65 +38,56 @@ export function JsonValidationModal({
   onApply?: () => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   const warns = fields.filter((f) => f.status === "warn");
   const allOk = warns.length === 0;
 
   return (
-    <div
-      className="fixed inset-0 z-[55] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <div
-        className="w-full max-w-[820px] max-h-[92vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div>
-            <div className="label-eyebrow">Validação JSON</div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)]">
-              {title}
-            </h2>
-            {subtitle && (
-              <p className="text-[12px] text-[color:var(--fg-subtle)] mt-1">
-                {subtitle}
-              </p>
-            )}
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow="Validação JSON"
+      title={title}
+      size="full"
+      zIndex={55}
+      isDirty={false}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
           >
-            ✕
+            Fechar
           </button>
-        </div>
+          {!allOk && onApply && (
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={pending}
+              className="text-[12px] px-3 py-1.5 rounded-md"
+              style={{
+                backgroundColor: "var(--rose-bg)",
+                color: "var(--rose-300)",
+                border: "1px solid var(--rose-border)",
+              }}
+            >
+              {pending ? "Aplicando…" : applyLabel}
+            </button>
+          )}
+        </>
+      }
+    >
+        {subtitle && (
+          <p className="text-[12px] text-[color:var(--fg-subtle)] px-5 pt-3">
+            {subtitle}
+          </p>
+        )}
 
         <div className="p-5 space-y-3">
           <div
@@ -220,40 +211,6 @@ export function JsonValidationModal({
           </div>
         </div>
 
-        <div
-          className="px-5 py-3 flex items-center justify-end gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="text-[12px] px-3 py-1.5 rounded-md"
-            style={{
-              backgroundColor: "var(--ink-3)",
-              color: "var(--fg-muted)",
-              border: "1px solid var(--b-soft)",
-            }}
-          >
-            Fechar
-          </button>
-          {!allOk && onApply && (
-            <button
-              type="button"
-              onClick={onApply}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--rose-bg)",
-                color: "var(--rose-300)",
-                border: "1px solid var(--rose-border)",
-              }}
-            >
-              {pending ? "Aplicando…" : applyLabel}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

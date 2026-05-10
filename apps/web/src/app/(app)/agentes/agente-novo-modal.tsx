@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SearchableSelect } from "@/components/data-table";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import { createAgente, type CreateAgenteInput } from "./actions";
 
 /** Handler Tab/Shift+Tab pra textarea YAML — indenta 2 espaços. */
@@ -68,6 +70,7 @@ export function AgenteNovoModal({
   const [clienteId, setClienteId] = useState<number | null>(null);
   const [isActive, setIsActive] = useState(true);
   const [humanIntervention, setHumanIntervention] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -79,14 +82,10 @@ export function AgenteNovoModal({
     }
   }, [open, clientes]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm(
+    { form: {}, isActive: true, humanIntervention: false, clienteId: null as number | null },
+    { form, isActive, humanIntervention, clienteId },
+  );
 
   if (!open) return null;
 
@@ -125,47 +124,42 @@ export function AgenteNovoModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[680px] max-h-[90vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div>
-            <div className="label-eyebrow">Novo</div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)]">
-              Cadastro de agente
-            </h2>
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow="Novo"
+      title="Cadastro de agente"
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          <button
+            type="submit"
+            form="modal-form"
+            disabled={pending || clienteId === null}
+            className="chip chip-mint text-[12px] px-3 py-1.5"
+            style={{ opacity: clienteId === null ? 0.5 : 1 }}
+          >
+            {pending ? "Criando…" : "Criar agente"}
+          </button>
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         {err && (
           <div
             className="px-5 py-2 text-[12px]"
@@ -372,33 +366,7 @@ export function AgenteNovoModal({
           </label>
         </div>
 
-        <div
-          className="px-5 py-3 flex items-center justify-end gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="text-[12px] px-3 py-1.5 rounded-md"
-            style={{
-              backgroundColor: "var(--ink-3)",
-              color: "var(--fg-muted)",
-              border: "1px solid var(--b-soft)",
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={pending || clienteId === null}
-            className="chip chip-mint text-[12px] px-3 py-1.5"
-            style={{ opacity: clienteId === null ? 0.5 : 1 }}
-          >
-            {pending ? "Criando…" : "Criar agente"}
-          </button>
-        </div>
       </form>
-    </div>
+    </ModalShell>
   );
 }

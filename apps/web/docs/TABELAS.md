@@ -248,3 +248,28 @@ Antes de commitar uma tabela nova/refatorada, executar mentalmente:
 - [ ] **Persistência**: reload preserva colunas escondidas e page size por rota.
 - [ ] **Paginação**: filtro reseta para página 0; trocar pageSize reseta para 0.
 - [ ] **Modal**: double-click em qualquer célula abre. Tab cycle funciona. Esc fecha.
+
+## Padrão obrigatório: toggle de saúde
+
+Toda tabela do sistema deve incluir o `<HealthToggle>` na toolbar superior:
+
+- Hook: `useHealthToggle("<tableKey>")` de `@/components/data-table`
+- Componente: `<HealthToggle value={showHealth} onChange={setShowHealth} />`
+- Posição: toolbar, antes do botão "Novo X"
+- Default: **OFF** (tabela limpa)
+- Persistência: localStorage por tabela (key `health-toggle:<tableKey>`)
+
+### O que o toggle controla
+
+Quando **OFF**:
+- Coluna "Saúde" escondida
+- Coluna "Validação JSON" escondida
+- Coluna "Status WA" escondida (se houver)
+- Ícones âmbar `i` de pendência nas células: escondidos
+- Border de erro nas células: substituído por borda padrão
+
+Quando **ON**: toda a info de saúde visível (estado original de debug).
+
+### Por quê
+
+User pediu — tabela "limpa" no dia-a-dia, ativa só pra debug. Reduz ruído visual.

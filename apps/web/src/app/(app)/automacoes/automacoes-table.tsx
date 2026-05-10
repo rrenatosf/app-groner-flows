@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -14,45 +13,40 @@ import { SearchBox } from "@/components/search-box";
 import {
   BooleanToggle,
   ColumnPicker,
+  HealthToggle,
   IconCheck,
   IconInfo,
   IconWarn,
   JsonValidationModal,
   PAGE_SIZE_OPTIONS,
-  SearchableSelect,
   TablePagination,
+  useHealthToggle,
   type PageSize,
 } from "@/components/data-table";
 import {
-  updateAutomacaoCell,
-  type EditableAutomacaoKey,
+  updateCatalogoAutomacaoCell,
+  type EditableCatalogoKey,
 } from "./actions";
 import { AutomacaoEditModal } from "./automacao-edit-modal";
 import { AutomacaoNovoModal } from "./automacao-novo-modal";
 import {
-  buildAutomacaoValidation,
-  pendenciasFor,
-  type AutomacaoRow,
-} from "./saude-automacao";
+  buildCatalogoValidation,
+  pendenciasCatalogoFor,
+  type CatalogoRow,
+} from "./saude-catalogo";
 
-export type LojaOption = { id: string; nome: string; clienteId: number };
-
-export type AutomacaoRowFull = AutomacaoRow & {
-  clienteNome: string | null;
-  clienteTenant: string | null;
-  lojaNome: string | null;
-};
+/** Linha do catálogo. Mantém o nome legacy `AutomacaoRowFull` exportado
+ *  pra compatibilidade com imports antigos durante a refatoração. */
+export type AutomacaoRowFull = CatalogoRow;
 
 type ColKey =
-  | "tenant"
-  | "loja"
   | "nome"
+  | "versao"
   | "descricao"
   | "baseUrl"
   | "n8nWorkflowId"
-  | "versao"
   | "isActive"
-  | "dadosConfiguracoes"
+  | "template"
   | "saude"
   | "validacao";
 
@@ -60,51 +54,38 @@ type ColDef = {
   key: ColKey;
   label: string;
   align?: "left" | "center" | "right";
-  superOnly?: boolean;
   readOnly?: boolean;
-  editKind?: "text" | "boolean" | "loja";
+  editKind?: "text" | "boolean";
 };
 
 const COLUMNS: ColDef[] = [
-  { key: "tenant", label: "Cliente", superOnly: true, readOnly: true },
   { key: "nome", label: "Nome", editKind: "text" },
-  { key: "loja", label: "Loja", editKind: "loja" },
+  { key: "versao", label: "Versão", align: "center", editKind: "text" },
   { key: "descricao", label: "Descrição", editKind: "text" },
   { key: "baseUrl", label: "Base URL", editKind: "text" },
   { key: "n8nWorkflowId", label: "ID workflow n8n", editKind: "text" },
-  { key: "versao", label: "Versão", align: "center", editKind: "text" },
   { key: "isActive", label: "Ativo", align: "center", editKind: "boolean" },
-  {
-    key: "dadosConfiguracoes",
-    label: "Configurações",
-    align: "center",
-    readOnly: true,
-  },
+  { key: "template", label: "Template", align: "center", readOnly: true },
   { key: "saude", label: "Saúde", align: "center", readOnly: true },
   {
     key: "validacao",
     label: "Validação JSON",
     align: "center",
     readOnly: true,
-    superOnly: true,
   },
 ];
 
-const STORAGE_HIDDEN = "groner.automacoes.col_hidden_v1";
-const STORAGE_PAGE_SIZE = "groner.automacoes.page_size_v1";
-const ACTION_COL_KEYS: ColKey[] = ["validacao"];
+const STORAGE_HIDDEN = "groner.automacoes_catalogo.col_hidden_v1";
+const STORAGE_PAGE_SIZE = "groner.automacoes_catalogo.page_size_v1";
 
-/** Default visible: nome, loja, descricao, n8n_workflow_id, versao,
- *  is_active, saude. As demais (baseUrl, dadosConfiguracoes,
- *  tenant, validacao) ficam escondidas por default — usuário liga
- *  via ColumnPicker se quiser. */
+/** Default visible. */
 const DEFAULT_VISIBLE: ReadonlySet<ColKey> = new Set<ColKey>([
   "nome",
-  "loja",
+  "versao",
   "descricao",
   "n8nWorkflowId",
-  "versao",
   "isActive",
+  "template",
   "saude",
 ]);
 
@@ -114,29 +95,25 @@ function fmtVal(v: unknown): string {
   return s.length === 0 ? "—" : s;
 }
 
-function valueFor(r: AutomacaoRowFull, key: ColKey): unknown {
-  if (key === "tenant") return r.clienteNome ?? r.clienteTenant ?? "";
-  if (key === "loja") return r.lojaNome ?? r.lojaId;
-  if (key === "saude") return pendenciasFor(r).length;
+function valueFor(r: CatalogoRow, key: ColKey): unknown {
+  if (key === "saude") return pendenciasCatalogoFor(r).length;
   if (key === "validacao") return 0;
-  if (key === "dadosConfiguracoes") {
-    return Array.isArray(r.dadosConfiguracoes) ? r.dadosConfiguracoes.length : 0;
+  if (key === "template") {
+    return Array.isArray(r.dadosConfiguracoesTemplate)
+      ? r.dadosConfiguracoesTemplate.length
+      : 0;
   }
   return (r as unknown as Record<string, unknown>)[key];
 }
 
-function isCellMissing(r: AutomacaoRowFull, key: ColKey): boolean {
+function isCellMissing(r: CatalogoRow, key: ColKey): boolean {
   if (
-    key === "tenant" ||
     key === "saude" ||
     key === "validacao" ||
     key === "isActive" ||
-    key === "dadosConfiguracoes"
+    key === "template"
   )
     return false;
-  if (key === "loja") {
-    return !r.lojaId || String(r.lojaId).trim() === "";
-  }
   const v = (r as unknown as Record<string, unknown>)[key];
   if (v === null || v === undefined) return true;
   if (typeof v === "string" && v.trim() === "") return true;
@@ -160,39 +137,25 @@ function cmp(av: unknown, bv: unknown): number {
 
 export function AutomacoesTable({
   rows,
-  isSuper,
   canEdit,
-  clientes,
-  lojas,
-  embedded = false,
 }: {
-  rows: AutomacaoRowFull[];
-  isSuper: boolean;
+  rows: CatalogoRow[];
   canEdit: boolean;
-  /** Lista de clientes pra picker do "+ Nova" (super: todos; cliente
-   *  admin: só o próprio). */
-  clientes: { id: number; nome: string }[];
-  /** Lista de lojas disponíveis pra edição da coluna `loja`. Inclui
-   *  todas as lojas dos clientes visíveis pelo caller. */
-  lojas: LojaOption[];
-  /** Renderiza dentro do drilldown — esconde toolbar redundante. */
-  embedded?: boolean;
 }) {
   const router = useRouter();
+  const { showHealth, setShowHealth } = useHealthToggle("automacoes");
   const visibleDefs = useMemo(
     () =>
-      COLUMNS.filter(
-        (c) =>
-          (!c.superOnly || isSuper) && (!embedded || c.key !== "tenant"),
+      COLUMNS.filter((c) =>
+        showHealth ? true : c.key !== "saude" && c.key !== "validacao",
       ),
-    [isSuper, embedded],
+    [showHealth],
   );
   const visibleKeys = useMemo(
     () => visibleDefs.map((c) => c.key),
     [visibleDefs],
   );
 
-  // Default hidden = visibleKeys MENOS DEFAULT_VISIBLE.
   const defaultHidden = useMemo(
     () => new Set(visibleKeys.filter((k) => !DEFAULT_VISIBLE.has(k))),
     [visibleKeys],
@@ -227,16 +190,6 @@ export function AutomacoesTable({
     else next.add(k);
     persistHidden(next);
   }
-  const allActionsHidden = ACTION_COL_KEYS.every((k) => hidden.has(k));
-  function toggleActionCols() {
-    const nextHidden = new Set(hidden);
-    if (allActionsHidden) {
-      ACTION_COL_KEYS.forEach((k) => nextHidden.delete(k));
-    } else {
-      ACTION_COL_KEYS.forEach((k) => nextHidden.add(k));
-    }
-    persistHidden(nextHidden);
-  }
 
   const [sortKey, setSortKey] = useState<ColKey>("nome");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -255,60 +208,6 @@ export function AutomacoesTable({
     });
     return arr;
   }, [rows, sortKey, sortDir]);
-
-  // Filtros super-only: nome + loja.
-  const [filtroNome, setFiltroNome] = useState("");
-  const [filtroLojaId, setFiltroLojaId] = useState<string | null>(null);
-  const filteredRows = useMemo(() => {
-    const qNome = filtroNome.trim().toLowerCase();
-    return sortedRows.filter((r) => {
-      if (qNome && !String(r.nome ?? "").toLowerCase().includes(qNome)) {
-        return false;
-      }
-      if (filtroLojaId && r.lojaId !== filtroLojaId) return false;
-      return true;
-    });
-  }, [sortedRows, filtroNome, filtroLojaId]);
-
-  // Agrupar por cliente (super-only).
-  const [groupByCliente, setGroupByCliente] = useState(false);
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
-  function toggleCollapse(cid: number) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(cid)) next.delete(cid);
-      else next.add(cid);
-      return next;
-    });
-  }
-  const grouped = useMemo(() => {
-    if (!groupByCliente) return null;
-    const map = new Map<
-      number,
-      {
-        clienteId: number;
-        clienteNome: string | null;
-        clienteTenant: string | null;
-        rows: AutomacaoRowFull[];
-      }
-    >();
-    for (const r of filteredRows) {
-      if (!map.has(r.clienteId)) {
-        map.set(r.clienteId, {
-          clienteId: r.clienteId,
-          clienteNome: r.clienteNome,
-          clienteTenant: r.clienteTenant,
-          rows: [],
-        });
-      }
-      map.get(r.clienteId)!.rows.push(r);
-    }
-    return Array.from(map.values()).sort((a, b) =>
-      (a.clienteNome ?? "").localeCompare(b.clienteNome ?? "", "pt-BR", {
-        sensitivity: "base",
-      }),
-    );
-  }, [groupByCliente, filteredRows]);
 
   // Paginação.
   const [pageSize, setPageSize] = useState<PageSize>(10);
@@ -335,10 +234,10 @@ export function AutomacoesTable({
   }
   useEffect(() => {
     setPageIndex(0);
-  }, [filteredRows.length]);
+  }, [sortedRows.length]);
   const pagedRows = useMemo(
-    () => filteredRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
-    [filteredRows, pageIndex, pageSize],
+    () => sortedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+    [sortedRows, pageIndex, pageSize],
   );
 
   // Edit inline.
@@ -370,11 +269,21 @@ export function AutomacoesTable({
   function commitEdit(value: string | boolean | null) {
     if (!editing) return;
     const { automacaoId, key } = editing;
-    // Mapeia ColKey para chave editável da action.
-    const actionKey =
-      key === "loja" ? "lojaId" : (key as EditableAutomacaoKey);
+    if (
+      key === "template" ||
+      key === "saude" ||
+      key === "validacao"
+    ) {
+      setEditing(null);
+      return;
+    }
+    const actionKey = key as EditableCatalogoKey;
     startTransition(async () => {
-      const res = await updateAutomacaoCell(automacaoId, actionKey, value);
+      const res = await updateCatalogoAutomacaoCell(
+        automacaoId,
+        actionKey,
+        value,
+      );
       if (!res.ok) {
         setSaveErr(res.error);
         return;
@@ -387,7 +296,7 @@ export function AutomacoesTable({
   function toggleBoolean(automacaoId: number, current: boolean) {
     setSaveErr(null);
     startTransition(async () => {
-      const res = await updateAutomacaoCell(
+      const res = await updateCatalogoAutomacaoCell(
         automacaoId,
         "isActive",
         !current,
@@ -401,9 +310,9 @@ export function AutomacoesTable({
   }
 
   const [novoOpen, setNovoOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<AutomacaoRowFull | null>(null);
+  const [editTarget, setEditTarget] = useState<CatalogoRow | null>(null);
   const [validacaoTarget, setValidacaoTarget] =
-    useState<AutomacaoRowFull | null>(null);
+    useState<CatalogoRow | null>(null);
 
   const orderedDefs = useMemo(
     () => visibleDefs.filter((d) => !hidden.has(d.key)),
@@ -465,8 +374,7 @@ export function AutomacoesTable({
     return () => window.removeEventListener("keydown", onKey);
   }, [editing, moveSelection, selected, pagedRows, orderedDefs, canEdit]);
 
-  function renderRow(r: AutomacaoRowFull, rIdx: number) {
-    const lojasDoCliente = lojas.filter((l) => l.clienteId === r.clienteId);
+  function renderRow(r: CatalogoRow, rIdx: number) {
     return (
       <tr
         key={r.id}
@@ -512,7 +420,7 @@ export function AutomacoesTable({
                   automacao={r}
                   onOpen={() => setValidacaoTarget(r)}
                 />
-              ) : d.key === "dadosConfiguracoes" ? (
+              ) : d.key === "template" ? (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -525,14 +433,14 @@ export function AutomacoesTable({
                     color: "var(--fg-muted)",
                     border: "1px solid var(--b-soft)",
                   }}
-                  title="Abrir configurações em modal"
+                  title="Abrir template em modal"
                 >
-                  {Array.isArray(r.dadosConfiguracoes)
-                    ? r.dadosConfiguracoes.length
+                  {Array.isArray(r.dadosConfiguracoesTemplate)
+                    ? r.dadosConfiguracoesTemplate.length
                     : 0}{" "}
                   grupo
-                  {Array.isArray(r.dadosConfiguracoes) &&
-                  r.dadosConfiguracoes.length === 1
+                  {Array.isArray(r.dadosConfiguracoesTemplate) &&
+                  r.dadosConfiguracoesTemplate.length === 1
                     ? ""
                     : "s"}
                 </button>
@@ -546,14 +454,6 @@ export function AutomacoesTable({
                     e.stopPropagation();
                     toggleBoolean(r.id, !!r.isActive);
                   }}
-                />
-              ) : isEditing && d.editKind === "loja" ? (
-                <LojaCellEditor
-                  lojas={lojasDoCliente}
-                  current={r.lojaId}
-                  pending={pending}
-                  onCancel={cancelEdit}
-                  onCommit={commitEdit}
                 />
               ) : isEditing ? (
                 <CellEditor
@@ -577,7 +477,7 @@ export function AutomacoesTable({
                   >
                     {fmtVal(valueFor(r, d.key))}
                   </span>
-                  {isCellMissing(r, d.key) && (
+                  {showHealth && isCellMissing(r, d.key) && (
                     <span
                       title="Informação faltando"
                       aria-label="Informação faltando"
@@ -643,65 +543,6 @@ export function AutomacoesTable({
       >
         <div className="flex items-center gap-2 flex-wrap">
           <SearchBox compact placeholder="Buscar por nome, descrição..." />
-          {isSuper && (
-            <input
-              type="text"
-              value={filtroNome}
-              onChange={(e) => setFiltroNome(e.target.value)}
-              placeholder="Filtrar por nome..."
-              className="text-[12px] px-2 py-1 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                border: "1px solid var(--b-soft)",
-                color: "var(--fg)",
-                outline: "none",
-                height: "26px",
-                width: "200px",
-              }}
-            />
-          )}
-          {isSuper && lojas.length > 1 && (
-            <SearchableSelect<LojaOption, string>
-              items={lojas}
-              value={filtroLojaId}
-              onChange={setFiltroLojaId}
-              getKey={(l) => l.id}
-              getLabel={(l) => l.nome}
-              placeholder="Filtrar por loja…"
-              searchPlaceholder="Buscar loja…"
-              width={200}
-            />
-          )}
-          {isSuper && !embedded && (
-            <button
-              type="button"
-              onClick={() => {
-                if (!groupByCliente) {
-                  setCollapsed(
-                    new Set(filteredRows.map((r) => r.clienteId)),
-                  );
-                  setGroupByCliente(true);
-                } else {
-                  setGroupByCliente(false);
-                  setCollapsed(new Set());
-                }
-              }}
-              className="text-[12px] px-2.5 py-1 rounded-md inline-flex items-center gap-1.5"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: groupByCliente
-                  ? "var(--mint-300)"
-                  : "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-                height: "26px",
-              }}
-            >
-              <span aria-hidden className="text-[10px]">
-                ⊟
-              </span>
-              <span>{groupByCliente ? "Desagrupar" : "Agrupar"}</span>
-            </button>
-          )}
         </div>
         <div className="flex items-center gap-2">
           <ColumnPicker
@@ -711,54 +552,7 @@ export function AutomacoesTable({
             onShowAll={() => persistHidden(new Set())}
             onHideAll={() => persistHidden(new Set(visibleKeys))}
           />
-          {isSuper && (
-            <button
-              type="button"
-              onClick={toggleActionCols}
-              className="text-[12px] px-2.5 py-1 rounded-md inline-flex items-center gap-2"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-                height: "26px",
-              }}
-            >
-              <span>Ações</span>
-              <span
-                aria-hidden
-                style={{
-                  position: "relative",
-                  display: "inline-block",
-                  width: 22,
-                  height: 12,
-                  borderRadius: 6,
-                  backgroundColor: allActionsHidden
-                    ? "rgba(255,255,255,0.10)"
-                    : "var(--mint-700)",
-                  border: `1px solid ${
-                    allActionsHidden
-                      ? "rgba(255,255,255,0.18)"
-                      : "var(--mint-600)"
-                  }`,
-                }}
-              >
-                <span
-                  style={{
-                    position: "absolute",
-                    top: 1,
-                    left: allActionsHidden ? 1 : 11,
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: allActionsHidden
-                      ? "rgba(255,255,255,0.65)"
-                      : "var(--mint-100)",
-                    transition: "left 160ms ease",
-                  }}
-                />
-              </span>
-            </button>
-          )}
+          <HealthToggle value={showHealth} onChange={setShowHealth} />
           {canEdit && (
             <button
               type="button"
@@ -814,67 +608,17 @@ export function AutomacoesTable({
             </tr>
           </thead>
           <tbody>
-            {!grouped && pagedRows.length === 0 && (
+            {pagedRows.length === 0 && (
               <tr>
                 <td
                   colSpan={orderedDefs.length}
                   className="text-center text-[color:var(--fg-subtle)] py-6"
                 >
-                  Nenhuma automação.
+                  Nenhuma automação no catálogo.
                 </td>
               </tr>
             )}
-            {grouped &&
-              grouped.map((g) => {
-                const isCollapsed = collapsed.has(g.clienteId);
-                return (
-                  <Fragment key={g.clienteId}>
-                    <tr
-                      onClick={() => toggleCollapse(g.clienteId)}
-                      style={{
-                        backgroundColor: "var(--ink-3)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <td
-                        colSpan={orderedDefs.length}
-                        style={{
-                          padding: "8px 16px",
-                          fontSize: "12px",
-                          color: "var(--fg)",
-                          fontWeight: 500,
-                          borderTop: "1px solid var(--b-base)",
-                        }}
-                      >
-                        <span
-                          style={{
-                            color: "var(--mint-300)",
-                            marginRight: 6,
-                          }}
-                        >
-                          {isCollapsed ? "▸" : "▾"}
-                        </span>
-                        {g.clienteNome ??
-                          g.clienteTenant ??
-                          `Cliente #${g.clienteId}`}
-                        <span
-                          className="numerics ml-2"
-                          style={{
-                            color: "var(--fg-subtle)",
-                            fontSize: "11px",
-                          }}
-                        >
-                          · {g.rows.length} automaç
-                          {g.rows.length === 1 ? "ão" : "ões"}
-                        </span>
-                      </td>
-                    </tr>
-                    {!isCollapsed &&
-                      g.rows.map((r, i) => renderRow(r, i))}
-                  </Fragment>
-                );
-              })}
-            {!grouped && pagedRows.map((r, i) => renderRow(r, i))}
+            {pagedRows.map((r, i) => renderRow(r, i))}
           </tbody>
         </table>
       </div>
@@ -887,8 +631,8 @@ export function AutomacoesTable({
         }}
       >
         <span>
-          {filteredRows.length} automaç
-          {filteredRows.length === 1 ? "ão" : "ões"}
+          {sortedRows.length} automaç
+          {sortedRows.length === 1 ? "ão" : "ões"}
         </span>
         {pending && <span>· salvando…</span>}
       </div>
@@ -898,7 +642,7 @@ export function AutomacoesTable({
         style={{ borderTop: "1px solid var(--b-soft)" }}
       >
         <TablePagination
-          total={filteredRows.length}
+          total={sortedRows.length}
           pageSize={pageSize}
           pageIndex={pageIndex}
           onPageSizeChange={persistPageSize}
@@ -909,18 +653,13 @@ export function AutomacoesTable({
       {canEdit && (
         <AutomacaoNovoModal
           open={novoOpen}
-          isSuper={isSuper}
-          clientes={clientes}
-          lojas={lojas}
           onClose={() => setNovoOpen(false)}
         />
       )}
       <AutomacaoEditModal
         open={editTarget !== null}
         target={editTarget}
-        isSuper={isSuper}
         canEdit={canEdit}
-        lojas={lojas}
         onClose={() => setEditTarget(null)}
       />
       <JsonValidationModal
@@ -928,11 +667,11 @@ export function AutomacoesTable({
         title={`Automação: ${validacaoTarget?.nome ?? "(sem nome)"}`}
         subtitle={
           validacaoTarget
-            ? `${validacaoTarget.clienteNome ?? "—"} · id ${validacaoTarget.id}`
+            ? `id ${validacaoTarget.id}${validacaoTarget.versao ? ` · v${validacaoTarget.versao}` : ""}`
             : undefined
         }
         fields={
-          validacaoTarget ? buildAutomacaoValidation(validacaoTarget) : []
+          validacaoTarget ? buildCatalogoValidation(validacaoTarget) : []
         }
         onClose={() => setValidacaoTarget(null)}
       />
@@ -944,10 +683,10 @@ function HealthBadge({
   automacao,
   onOpen,
 }: {
-  automacao: AutomacaoRow;
+  automacao: CatalogoRow;
   onOpen: () => void;
 }) {
-  const pendentes = pendenciasFor(automacao);
+  const pendentes = pendenciasCatalogoFor(automacao);
   const ok = pendentes.length === 0;
   return (
     <button
@@ -991,11 +730,13 @@ function ValidationBadgeAuto({
   automacao,
   onOpen,
 }: {
-  automacao: AutomacaoRow;
+  automacao: CatalogoRow;
   onOpen: () => void;
 }) {
-  const fields = buildAutomacaoValidation(automacao);
-  const warns = fields.filter((f) => f.status === "warn").length;
+  const fields = buildCatalogoValidation(automacao);
+  const warns = fields.filter(
+    (f: { status: "ok" | "warn" }) => f.status === "warn",
+  ).length;
   const ok = warns === 0;
   return (
     <button
@@ -1020,62 +761,6 @@ function ValidationBadgeAuto({
   );
 }
 
-function LojaCellEditor({
-  lojas,
-  current,
-  pending,
-  onCancel,
-  onCommit,
-}: {
-  lojas: LojaOption[];
-  current: string;
-  pending: boolean;
-  onCancel: () => void;
-  onCommit: (value: string | boolean | null) => void;
-}) {
-  const [value, setValue] = useState<string | null>(current ?? null);
-  function commit() {
-    if (!value) return;
-    onCommit(value);
-  }
-  return (
-    <span
-      className="inline-flex items-center gap-1"
-      style={{ position: "relative", zIndex: 10 }}
-    >
-      <SearchableSelect<LojaOption, string>
-        items={lojas}
-        value={value}
-        onChange={(k) => setValue(k)}
-        getKey={(l) => l.id}
-        getLabel={(l) => l.nome}
-        placeholder="Selecione a loja…"
-        searchPlaceholder="Buscar loja…"
-        disabled={pending}
-        width={240}
-      />
-      <button
-        type="button"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={commit}
-        disabled={pending || !value}
-        className="text-[10px] text-[color:var(--mint-300)]"
-      >
-        ✓
-      </button>
-      <button
-        type="button"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={onCancel}
-        disabled={pending}
-        className="text-[10px] text-[color:var(--fg-subtle)]"
-      >
-        ✕
-      </button>
-    </span>
-  );
-}
-
 function CellEditor({
   def,
   row,
@@ -1084,7 +769,7 @@ function CellEditor({
   onCommit,
 }: {
   def: ColDef;
-  row: AutomacaoRow;
+  row: CatalogoRow;
   pending: boolean;
   onCancel: () => void;
   onCommit: (value: string | boolean | null) => void;

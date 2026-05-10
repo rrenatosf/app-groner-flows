@@ -20,12 +20,14 @@ import {
   AcessarButton,
   ColumnPicker,
   CopyButton,
+  HealthToggle,
   IconCheck,
   IconInfo,
   IconWarn,
   JsonValidationModal,
   PAGE_SIZE_OPTIONS,
   TablePagination,
+  useHealthToggle,
   type PageSize,
 } from "@/components/data-table";
 import {
@@ -180,15 +182,21 @@ export function LojasTable({
   embeddedClienteNome?: string;
 }) {
   const router = useRouter();
+  const { showHealth, setShowHealth } = useHealthToggle("lojas");
 
-  // Colunas visíveis (filtra superOnly; remove `acoes` quando embedded).
+  // Colunas visíveis (filtra superOnly; remove `acoes` quando embedded;
+  // esconde colunas de saúde quando toggle OFF).
   const visibleDefs = useMemo(
     () =>
       COLUMNS.filter(
         (c) =>
-          (!c.superOnly || isSuper) && (!embedded || c.key !== "acoes"),
+          (!c.superOnly || isSuper) &&
+          (!embedded || c.key !== "acoes") &&
+          (showHealth ||
+            (c.key !== "saude" &&
+              c.key !== "validacao")),
       ),
-    [isSuper, embedded],
+    [isSuper, embedded, showHealth],
   );
   const visibleKeys = useMemo(() => visibleDefs.map((c) => c.key), [visibleDefs]);
   // ColumnPicker: `acoes` nunca aparece — não é ocultável.
@@ -710,7 +718,7 @@ export function LojasTable({
                       ? (r.clienteNome ?? r.clienteTenant ?? "—")
                       : fmtVal(valueFor(r, d.key))}
                   </span>
-                  {isCellMissing(r, d.key) && (
+                  {showHealth && isCellMissing(r, d.key) && (
                     <span
                       title="Informação faltando"
                       aria-label="Informação faltando"
@@ -874,6 +882,7 @@ export function LojasTable({
             onShowAll={() => persistHidden(new Set())}
             onHideAll={() => persistHidden(new Set(visibleKeys.filter((k) => k !== "acoes")))}
           />
+          <HealthToggle value={showHealth} onChange={setShowHealth} />
           {canEdit && (
             <button
               type="button"

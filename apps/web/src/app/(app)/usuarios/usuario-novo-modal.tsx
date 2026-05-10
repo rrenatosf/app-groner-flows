@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SearchableSelect } from "@/components/data-table";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import { createVendedorTyped, type CreateVendedorInput } from "./actions";
 import type { UsuarioRow } from "./usuarios-table";
 
@@ -13,6 +15,7 @@ export function UsuarioNovoModal({
   forcedClienteId,
   forcedClienteNome,
   forcedLojasDoCliente,
+  forcedLojaIdsPreSelected,
   onClose,
 }: {
   open: boolean;
@@ -23,6 +26,8 @@ export function UsuarioNovoModal({
   forcedClienteId?: number;
   forcedClienteNome?: string;
   forcedLojasDoCliente?: { id: string; nome: string }[];
+  /** Drilldown loja: pré-marca essas lojas no checklist (não trava). */
+  forcedLojaIdsPreSelected?: string[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -32,6 +37,7 @@ export function UsuarioNovoModal({
   const [clienteId, setClienteId] = useState<number | null>(null);
   const [lojaIds, setLojaIds] = useState<string[]>([]);
   const [role, setRole] = useState<"owner" | "vendedor">("vendedor");
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Lista de clientes únicos derivada das rows. Quando forcedClienteId
   // vem preenchido (modo drilldown), garante que ele esteja na lista
@@ -88,8 +94,8 @@ export function UsuarioNovoModal({
     setForm({});
     setErr(null);
     setRole("vendedor");
-    setLojaIds([]);
-  }, [open]);
+    setLojaIds(forcedLojaIdsPreSelected ?? []);
+  }, [open, forcedLojaIdsPreSelected]);
 
   // Auto-seleção de clienteId. Deps separadas pra evitar mismatch
   // de tamanho do array entre HMR ticks.
@@ -102,14 +108,10 @@ export function UsuarioNovoModal({
     }
   }, [open, clientes, forcedClienteId]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm(
+    { form: {}, role: "vendedor" as "owner" | "vendedor", lojaIds: forcedLojaIdsPreSelected ?? [] },
+    { form, role, lojaIds },
+  );
 
   if (!open) return null;
 
@@ -150,47 +152,42 @@ export function UsuarioNovoModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[640px] max-h-[90vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div>
-            <div className="label-eyebrow">Novo</div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)]">
-              Cadastro de usuário
-            </h2>
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow="Novo"
+      title="Cadastro de usuário"
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              backgroundColor: "var(--ink-3)",
+              color: "var(--fg-muted)",
+              border: "1px solid var(--b-soft)",
+            }}
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          <button
+            type="submit"
+            form="modal-form"
+            disabled={pending || clienteId === null}
+            className="chip chip-mint text-[12px] px-3 py-1.5"
+            style={{ opacity: clienteId === null ? 0.5 : 1 }}
+          >
+            {pending ? "Criando…" : "Criar usuário"}
+          </button>
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         {err && (
           <div
             className="px-5 py-2 text-[12px]"
@@ -215,7 +212,9 @@ export function UsuarioNovoModal({
                 value={clienteId}
                 onChange={(k) => {
                   setClienteId(k);
-                  setLojaIds([]);
+                  // Preserva pré-seleção forçada quando user troca cliente
+                  // (improvável no drilldown, mas defensivo pra futuro).
+                  setLojaIds(forcedLojaIdsPreSelected ?? []);
                 }}
                 getKey={(c) => c.id}
                 getLabel={(c) => c.nome}
@@ -345,34 +344,8 @@ export function UsuarioNovoModal({
           </div>
         </div>
 
-        <div
-          className="px-5 py-3 flex items-center justify-end gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="text-[12px] px-3 py-1.5 rounded-md"
-            style={{
-              backgroundColor: "var(--ink-3)",
-              color: "var(--fg-muted)",
-              border: "1px solid var(--b-soft)",
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={pending || clienteId === null}
-            className="chip chip-mint text-[12px] px-3 py-1.5"
-            style={{ opacity: clienteId === null ? 0.5 : 1 }}
-          >
-            {pending ? "Criando…" : "Criar usuário"}
-          </button>
-        </div>
       </form>
-    </div>
+    </ModalShell>
   );
 }
 

@@ -37,4 +37,40 @@ The user is **non-technical** (does not program, does not know git/devops/infra 
 ### Caveman mode
 
 If "CAVEMAN MODE ACTIVE" appears in system reminder, drop articles/filler in technical responses to other agents — but with this user, **clarity always wins over brevity**. When user asks to clarify or says "não entendi", drop caveman for that explanation and use full Portuguese sentences.
+
+### Formato visual obrigatório
+
+User é **muito visual**. Texto corrido em parágrafos longos não funciona. Sempre estruturar resposta com:
+
+- **Headers H1 (`#`) por tópico** quando responde múltiplos itens. Ex: `# Item 1 — Tema X` / `# Item 2 — Tema Y`.
+- **Sub-headers H2 (`##`)** dentro de cada item: "O que tem hoje", "O que doc/sistema diz", "Por quê", "Pergunta pra ti", "Resumo".
+- **Tabelas** sempre que houver comparação (atual vs proposto, vantagem vs desvantagem, antes vs depois).
+- **Bullets curtos** em vez de parágrafos longos.
+- **Linha horizontal `---`** separando tópicos grandes.
+- **No fim**: seção "Resumo" ou "O que decidir agora" com perguntas numeradas.
+
+Padrão obrigatório quando responde múltiplos itens consolidados:
+
+```
+# Item 1 — <título do tema>
+
+## <sub-seção 1>
+<conteúdo curto>
+
+## <sub-seção 2>
+<conteúdo curto>
+
+---
+
+# Item 2 — <título>
+...
+
+---
+
+# Resumo do que decidir agora
+1. ❓ <pergunta 1>
+2. ✅ <confirmação 1>
+```
+
+User aprovou esse formato em 2026-05-10. Repetir SEMPRE em respostas multi-tópico. Não voltar pra texto corrido.
 <!-- SPECKIT END -->

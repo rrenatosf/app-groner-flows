@@ -7,6 +7,7 @@ import {
   agendamentos,
   agentes,
   clientes,
+  clientesAutomacoes,
   emptyLoja,
   emptyVendedor,
   leads,
@@ -44,7 +45,12 @@ function nextVendedorId(vendedores: Vendedor[]): number {
 export async function deleteCliente(
   clienteId: number,
   { skipChecks = false }: { skipChecks?: boolean } = {},
-): Promise<{ leadsRemovidos: number; agendamentosRemovidos: number; agentesRemovidos: number }> {
+): Promise<{
+  leadsRemovidos: number;
+  agendamentosRemovidos: number;
+  agentesRemovidos: number;
+  automacoesRemovidas: number;
+}> {
   // Bloqueio: não permite remover superadmin (Looper).
   if (!skipChecks) {
     const c = await db
@@ -85,12 +91,23 @@ export async function deleteCliente(
     .where(eq(agentes.clienteId, clienteId))
     .returning({ id: agentes.id });
 
+  // Conta instâncias de automações antes do delete cascata (FK
+  // ON DELETE CASCADE em cliente_automacoes.cliente_id remove
+  // automaticamente — só precisamos contar pra reportar no retorno).
+  // Catálogo (`automacoes`) permanece intacto.
+  const autosDoCliente = await db
+    .select({ id: clientesAutomacoes.id })
+    .from(clientesAutomacoes)
+    .where(eq(clientesAutomacoes.clienteId, clienteId));
+  const automacoesRemovidas = autosDoCliente.length;
+
   await db.delete(clientes).where(eq(clientes.id, clienteId));
 
   return {
     leadsRemovidos: rLeads.length,
     agendamentosRemovidos,
     agentesRemovidos: rAgentes.length,
+    automacoesRemovidas,
   };
 }
 

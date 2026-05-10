@@ -14,9 +14,11 @@ import { useRouter } from "next/navigation";
 import { SearchBox } from "@/components/search-box";
 import {
   ColumnPicker,
+  HealthToggle,
   IconInfo,
   PAGE_SIZE_OPTIONS,
   TablePagination,
+  useHealthToggle,
   type PageSize,
 } from "@/components/data-table";
 import {
@@ -163,9 +165,13 @@ export function AgendamentosTable({
   embedded?: boolean;
 }) {
   const router = useRouter();
+  const { showHealth, setShowHealth } = useHealthToggle("agendamentos");
   const visibleDefs = useMemo(
-    () => COLUMNS.filter((c) => !c.superOnly || isSuper),
-    [isSuper],
+    () =>
+      COLUMNS.filter((c) => !c.superOnly || isSuper).filter((c) =>
+        showHealth ? true : c.key !== "saude",
+      ),
+    [isSuper, showHealth],
   );
   const visibleKeys = useMemo(() => visibleDefs.map((c) => c.key), [visibleDefs]);
 
@@ -510,7 +516,7 @@ export function AgendamentosTable({
                       {displayFor(r, d.key)}
                     </span>
                   )}
-                  {isCellMissing(r, d.key) && (
+                  {showHealth && isCellMissing(r, d.key) && (
                     <span
                       title="Informação faltando"
                       aria-label="Informação faltando"
@@ -652,6 +658,7 @@ export function AgendamentosTable({
             onShowAll={() => persistHidden(new Set())}
             onHideAll={() => persistHidden(new Set(visibleKeys))}
           />
+          <HealthToggle value={showHealth} onChange={setShowHealth} />
         </div>
       </div>
 

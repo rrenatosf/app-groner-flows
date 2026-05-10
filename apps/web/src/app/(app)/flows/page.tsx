@@ -1,26 +1,53 @@
 import Link from "next/link";
-import { count, eq } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { agentes, automacoes, clientes, leads } from "@/lib/db/schema";
+import {
+  agentes,
+  automacoes,
+  clientes,
+  clientesAutomacoes,
+  leads,
+} from "@/lib/db/schema";
 import { PageHeader } from "@/components/page-header";
 
 export default async function FlowsHomePage() {
   const [
     [clientesCountRow],
     [agentesCountRow],
-    [automacoesCountRow],
+    [catalogoCountRow],
+    [assinaturasAtivasRow],
     [leadsCountRow],
     clientesAtivos,
   ] = await Promise.all([
     db.select({ v: count() }).from(clientes),
     db.select({ v: count() }).from(agentes),
     db.select({ v: count() }).from(automacoes),
+    db
+      .select({ v: count() })
+      .from(clientesAutomacoes)
+      .where(eq(clientesAutomacoes.isActive, true)),
     db.select({ v: count() }).from(leads),
     db
       .select({ v: count() })
       .from(clientes)
       .where(eq(clientes.isActive, true)),
   ]);
+
+  // Health check: vendedores com recebe_agendamento=true mas sem
+  // intervalo cadastrado em nenhum dia.
+  const inconsistentesResult = await db.execute(sql`
+    SELECT COUNT(*)::int AS n
+    FROM clientes c, jsonb_array_elements(c.vendedores) v
+    WHERE (v->>'recebe_agendamento')::boolean = true
+      AND NOT EXISTS (
+        SELECT 1 FROM jsonb_each(COALESCE(v->'horarios', '{}'::jsonb)) e
+        WHERE jsonb_typeof(e.value) = 'array'
+          AND jsonb_array_length(e.value) > 0
+      )
+  `);
+  const inconsistentesCount = Number(
+    (inconsistentesResult as unknown as Array<{ n: number }>)[0]?.n ?? 0,
+  );
 
   return (
     <>
@@ -38,8 +65,53 @@ export default async function FlowsHomePage() {
             value={String(clientesAtivos[0]?.v ?? 0)}
           />
           <Kpi label="Agentes IA" value={String(agentesCountRow.v)} />
-          <Kpi label="Automações" value={String(automacoesCountRow.v)} />
+          <Kpi label="Catálogo" value={String(catalogoCountRow.v)} />
+          <Kpi
+            label="Assinaturas ativas"
+            value={String(assinaturasAtivasRow.v)}
+          />
           <Kpi label="Leads (total)" value={String(leadsCountRow.v)} />
+        </section>
+
+        <section>
+          <div className="label-eyebrow mb-3">Saúde do sistema</div>
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <li>
+              <Link
+                href="/flows/health"
+                className="block rounded-xl p-5 transition-colors hover:bg-[color:var(--ink-4)]"
+                style={{
+                  backgroundColor: "var(--ink-2)",
+                  border: `1px solid ${
+                    inconsistentesCount > 0
+                      ? "var(--amber-border)"
+                      : "var(--b-soft)"
+                  }`,
+                }}
+              >
+                <div className="label-eyebrow">Vendedores inconsistentes</div>
+                <div
+                  className="serif text-[36px] leading-none mt-2"
+                  style={{
+                    color:
+                      inconsistentesCount > 0
+                        ? "var(--amber-300)"
+                        : "var(--mint-300)",
+                  }}
+                >
+                  {inconsistentesCount}
+                </div>
+                <p className="text-[12.5px] text-[color:var(--fg-muted)] mt-2 leading-snug">
+                  {inconsistentesCount > 0
+                    ? "Vendedores marcados como 'Recebe agendamentos' mas sem horário cadastrado. Sistema manda leads pra eles e ninguém atende."
+                    : "Nenhuma inconsistência detectada. Todos vendedores 'Recebe agendamentos' têm horários cadastrados."}
+                </p>
+                <p className="text-[11px] text-[color:var(--mint-300)] mt-3">
+                  {inconsistentesCount > 0 ? "Ver detalhes →" : "Ver lista →"}
+                </p>
+              </Link>
+            </li>
+          </ul>
         </section>
 
         <section>

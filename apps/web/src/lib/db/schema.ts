@@ -1,11 +1,13 @@
 import {
   bigint,
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
 
@@ -362,35 +364,76 @@ export const leads = pgTable("leads", {
   sessionId: text("session_id"),
 });
 
-export const automacoes = pgTable("automacoes", {
-  id: bigint("id", { mode: "number" })
-    .primaryKey()
-    .generatedAlwaysAsIdentity(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  clienteId: bigint("cliente_id", { mode: "number" }).notNull(),
-  /** UUID da loja (Loja.id) que essa automação serve. Não é FK
-   *  formal porque lojas vivem em `clientes.lojas` (jsonb). Validação
-   *  de integridade fica no app. */
-  lojaId: text("loja_id").notNull(),
-  nome: text("nome").notNull(),
-  descricao: text("descricao"),
-  /** Base URL do n8n (ex: https://n8n.dominio.com). */
-  baseUrl: text("base_url"),
-  /** ID do workflow n8n (slug alfanumérico). */
-  n8nWorkflowId: text("n8n_workflow_id"),
-  /** Versão semântica ou identificador interno da automação. */
-  versao: text("versao"),
-  isActive: boolean("is_active").notNull().default(true),
-  /** Configurações dinâmicas — array de grupos. Cada item é um
-   *  objeto com EXATAMENTE 1 chave (nome do grupo) cujo valor é
-   *  outro objeto (config arbitrária do grupo). */
-  dadosConfiguracoes: jsonb("dados_configuracoes")
-    .$type<Array<Record<string, Record<string, unknown>>>>()
-    .notNull()
-    .default([]),
-});
+export const automacoes = pgTable(
+  "automacoes",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    nome: text("nome").notNull(),
+    descricao: text("descricao"),
+    baseUrl: text("base_url"),
+    n8nWorkflowId: text("n8n_workflow_id"),
+    versao: text("versao"),
+    isActive: boolean("is_active").notNull().default(true),
+    /** Template canônico — copiado pra cliente_automacoes.dados_configuracoes
+     *  no momento de criar a instância. Editar aqui não afeta instâncias
+     *  existentes. */
+    dadosConfiguracoesTemplate: jsonb("dados_configuracoes_template")
+      .$type<Array<Record<string, Record<string, unknown>>>>()
+      .notNull()
+      .default([]),
+  },
+  (t) => ({
+    nomeVersaoUnique: uniqueIndex("automacoes_nome_versao_unique").on(
+      t.nome,
+      t.versao,
+    ),
+  }),
+);
+
+// Tabela física é `cliente_automacoes` (singular, conforme doc Notion).
+// Var TS mantém plural pra alinhar com convenção do codebase.
+export const clientesAutomacoes = pgTable(
+  "cliente_automacoes",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    automacaoId: bigint("automacao_id", { mode: "number" })
+      .notNull()
+      .references(() => automacoes.id, { onDelete: "restrict" }),
+    clienteId: bigint("cliente_id", { mode: "number" })
+      .notNull()
+      .references(() => clientes.id, { onDelete: "cascade" }),
+    /** UUID da loja (Loja.id). Soft link — lojas vivem em jsonb. */
+    lojaId: text("loja_id").notNull(),
+    dadosConfiguracoes: jsonb("dados_configuracoes")
+      .$type<Array<Record<string, Record<string, unknown>>>>()
+      .notNull()
+      .default([]),
+    isActive: boolean("is_active").notNull().default(true),
+  },
+  (t) => ({
+    uniq: uniqueIndex("clientes_automacoes_unique").on(
+      t.clienteId,
+      t.automacaoId,
+      t.lojaId,
+    ),
+    clienteIdx: index("clientes_automacoes_cliente_idx").on(t.clienteId),
+    clienteLojaIdx: index("clientes_automacoes_cliente_loja_idx").on(
+      t.clienteId,
+      t.lojaId,
+    ),
+    automacaoIdx: index("clientes_automacoes_automacao_idx").on(t.automacaoId),
+  }),
+);
 
 export const agendamentos = pgTable("agendamentos", {
   id: bigint("id", { mode: "number" })
@@ -408,5 +451,6 @@ export const agendamentos = pgTable("agendamentos", {
 export type Cliente = typeof clientes.$inferSelect;
 export type Agente = typeof agentes.$inferSelect;
 export type Automacao = typeof automacoes.$inferSelect;
+export type ClienteAutomacao = typeof clientesAutomacoes.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type Agendamento = typeof agendamentos.$inferSelect;

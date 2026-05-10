@@ -4,8 +4,8 @@ import { eq, and, count } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import {
-  automacoes,
   clientes,
+  clientesAutomacoes,
   emptyLoja,
   pickCanonicalLoja,
   type Loja,
@@ -37,6 +37,24 @@ export type EditableLojaKey =
   | "agenda_tempo_antecedencia";
 
 const NUMERIC_KEYS: ReadonlySet<EditableLojaKey> = new Set([
+  "area_atuacao",
+  "consumo_minimo",
+]);
+
+/** Whitelist do que o cliente comum (não-super) pode editar pela aba
+ *  "Dados" da loja. Identificação (nome/CRM ID/CNPJ/telefone) e Agenda
+ *  ficam fora — só super mexe, pra não quebrar workflow N8N e CRM
+ *  externo. Endereço e regras (área de atuação / consumo mínimo) o
+ *  cliente edita à vontade. */
+const CLIENTE_ALLOWED: ReadonlySet<EditableLojaKey> = new Set([
+  "endereco",
+  "endereco_cep",
+  "endereco_rua",
+  "endereco_bairro",
+  "endereco_cidade",
+  "endereco_estado",
+  "endereco_numero",
+  "endereco_complemento",
   "area_atuacao",
   "consumo_minimo",
 ]);
@@ -115,6 +133,13 @@ export async function updateLojaCell(
   const idx = findLojaIndex(lojas, lojaId);
   if (idx < 0) return { ok: false, error: "Loja não encontrada." };
 
+  if (!auth.isSuper && !CLIENTE_ALLOWED.has(key)) {
+    return {
+      ok: false,
+      error: `Campo "${key}" só super pode editar. Solicite ao admin.`,
+    };
+  }
+
   const patch: Record<string, unknown> = {};
   if (NUMERIC_KEYS.has(key)) {
     const n =
@@ -165,6 +190,12 @@ export async function updateLojaFields(
   const writable: Record<string, unknown> = {};
   for (const [k, raw] of Object.entries(patch)) {
     const key = k as EditableLojaKey;
+    if (!auth.isSuper && !CLIENTE_ALLOWED.has(key)) {
+      return {
+        ok: false,
+        error: `Campo "${key}" só super pode editar. Solicite ao admin.`,
+      };
+    }
     if (NUMERIC_KEYS.has(key)) {
       const n =
         typeof raw === "number"
@@ -318,20 +349,23 @@ export async function deleteLoja(
 ): Promise<Ok | Err> {
   const auth = await loadAndAuthorize(clienteId);
   if (!auth.ok) return auth;
+  if (!auth.isSuper) {
+    return { ok: false, error: "Só super pode executar essa ação." };
+  }
   const lojas: Loja[] = Array.isArray(auth.cliente.lojas)
     ? (auth.cliente.lojas as Loja[])
     : [];
   const idx = findLojaIndex(lojas, lojaId);
   if (idx < 0) return { ok: false, error: "Loja não encontrada." };
 
-  // Cascade guard: automações ativas/inativas vinculadas bloqueiam.
+  // Cascade guard: instâncias de automações vinculadas bloqueiam.
   const [autoCount] = await db
     .select({ n: count() })
-    .from(automacoes)
+    .from(clientesAutomacoes)
     .where(
       and(
-        eq(automacoes.clienteId, clienteId),
-        eq(automacoes.lojaId, lojaId),
+        eq(clientesAutomacoes.clienteId, clienteId),
+        eq(clientesAutomacoes.lojaId, lojaId),
       ),
     );
   const n = Number(autoCount?.n ?? 0);
@@ -359,6 +393,9 @@ export async function applyCanonicalShape(
 ): Promise<Ok | Err> {
   const auth = await loadAndAuthorize(clienteId);
   if (!auth.ok) return auth;
+  if (!auth.isSuper) {
+    return { ok: false, error: "Só super pode executar essa ação." };
+  }
   const lojas: Loja[] = Array.isArray(auth.cliente.lojas)
     ? (auth.cliente.lojas as Loja[])
     : [];

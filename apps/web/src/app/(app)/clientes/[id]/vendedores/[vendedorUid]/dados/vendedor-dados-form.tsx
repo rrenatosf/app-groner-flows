@@ -87,6 +87,22 @@ export function VendedorDadosForm({
     e.preventDefault();
     setErr(null);
     setSavedOk(false);
+
+    // Validação: recebe_agendamento exige pelo menos 1 intervalo
+    // cadastrado em algum dia (defesa em profundidade — backend também valida).
+    if (recebeAgendamento) {
+      const h = vendedor.horarios ?? {};
+      const temIntervalo = Object.values(h).some(
+        (arr) => Array.isArray(arr) && arr.length > 0,
+      );
+      if (!temIntervalo) {
+        setErr(
+          'Configure ao menos 1 horário antes de marcar "Recebe agendamentos". Use a aba Horários.',
+        );
+        return;
+      }
+    }
+
     const patch: UpdateVendedorPartial = {
       nome: form.nome ?? null,
       email: form.email ?? null,
@@ -242,13 +258,7 @@ export function VendedorDadosForm({
               setRole(e.target.value === "owner" ? "owner" : "vendedor")
             }
             disabled={pending || !canEdit}
-            className="text-[13px] px-2.5 py-1.5 rounded-md"
-            style={{
-              backgroundColor: "var(--ink-3)",
-              border: "1px solid var(--b-soft)",
-              color: "var(--fg)",
-              outline: "none",
-            }}
+            className="input-edit"
           >
             <option value="vendedor">Usuário</option>
             <option value="owner">Admin do tenant</option>
@@ -349,7 +359,7 @@ export function VendedorDadosForm({
               type="button"
               onClick={handleDelete}
               disabled={pending}
-              className="chip chip-red text-[12px] px-3 py-1.5"
+              className="btn-danger"
             >
               Remover
             </button>
@@ -358,7 +368,7 @@ export function VendedorDadosForm({
             <button
               type="submit"
               disabled={pending}
-              className="chip chip-mint text-[12px] px-3 py-1.5"
+              className="btn-primary"
             >
               {pending ? "Salvando…" : "Salvar"}
             </button>
@@ -396,13 +406,7 @@ function FieldText({
         value={form[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
         disabled={pending}
-        className="text-[13px] px-2.5 py-1.5 rounded-md"
-        style={{
-          backgroundColor: "var(--ink-3)",
-          border: "1px solid var(--b-soft)",
-          color: "var(--fg)",
-          outline: "none",
-        }}
+        className="input-edit"
       />
     </label>
   );

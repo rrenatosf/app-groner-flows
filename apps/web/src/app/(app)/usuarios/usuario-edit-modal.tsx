@@ -10,9 +10,11 @@
  * e horários em `.../horarios/horarios-form.tsx`.
  */
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SecretInput } from "@/components/data-table";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import type { HorariosVendedor } from "@/lib/db/schema";
 import {
   applyVendedorCanonicalShape,
@@ -54,37 +56,59 @@ export function UsuarioEditModal({
   const [recebeAgendamento, setRecebeAgendamento] = useState(true);
   const [lojaIds, setLojaIds] = useState<string[]>([]);
   const [horarios, setHorarios] = useState<HorariosVendedor>({});
+  const [initial, setInitial] = useState<{
+    form: Record<string, string>;
+    role: "owner" | "vendedor";
+    isActive: boolean;
+    recebeAgendamento: boolean;
+    lojaIds: string[];
+    horarios: HorariosVendedor;
+  }>({
+    form: {},
+    role: "vendedor",
+    isActive: true,
+    recebeAgendamento: true,
+    lojaIds: [],
+    horarios: {},
+  });
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (open && target) {
       const v = target.vendedor;
       setTab("info");
       setErr(null);
-      setForm({
+      const nextForm = {
         nome: v.nome ?? "",
         email: v.email ?? "",
         telefone: v.telefone ?? "",
         senha: "",
         crm_id: v.crm_id ?? "",
-      });
+      };
+      const nextLojas = Array.isArray(v.loja_ids) ? [...v.loja_ids] : [];
+      const nextHorarios =
+        v.horarios && typeof v.horarios === "object" ? { ...v.horarios } : {};
+      setForm(nextForm);
       setRole(v.role);
       setIsActive(v.is_active);
       setRecebeAgendamento(v.recebe_agendamento);
-      setLojaIds(Array.isArray(v.loja_ids) ? [...v.loja_ids] : []);
-      setHorarios(
-        v.horarios && typeof v.horarios === "object" ? { ...v.horarios } : {},
-      );
+      setLojaIds(nextLojas);
+      setHorarios(nextHorarios);
+      setInitial({
+        form: nextForm,
+        role: v.role,
+        isActive: v.is_active,
+        recebeAgendamento: v.recebe_agendamento,
+        lojaIds: nextLojas,
+        horarios: nextHorarios,
+      });
     }
   }, [open, target]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm(
+    initial,
+    { form, role, isActive, recebeAgendamento, lojaIds, horarios },
+  );
 
   const pendencias = useMemo(
     () => (target ? pendenciasFor(target.vendedor) : []),
@@ -115,6 +139,20 @@ export function UsuarioEditModal({
     e.preventDefault();
     if (!target) return;
     setErr(null);
+
+    // Validação: recebe_agendamento exige pelo menos 1 intervalo cadastrado.
+    if (recebeAgendamento) {
+      const temIntervalo = Object.values(horarios ?? {}).some(
+        (arr) => Array.isArray(arr) && arr.length > 0,
+      );
+      if (!temIntervalo) {
+        setErr(
+          'Configure ao menos 1 horário antes de marcar "Recebe agendamentos".',
+        );
+        return;
+      }
+    }
+
     const patch: UpdateVendedorPartial = {
       nome: form.nome ?? null,
       email: form.email ?? null,
@@ -181,49 +219,51 @@ export function UsuarioEditModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[860px] max-h-[92vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between gap-3"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="label-eyebrow">
-              Usuário {isSuper ? `· ${target.clienteNome ?? "—"}` : ""}
-            </div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)] truncate">
-              {target.vendedor.nome ?? "(sem nome)"}
-            </h2>
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow={`Usuário${isSuper ? ` · ${target.clienteNome ?? "—"}` : ""}`}
+      title={target.vendedor.nome ?? "(sem nome)"}
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
+            uid: {target.vendedor.uid.slice(0, 8)}…
+          </span>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={pending}
+              className="btn-danger"
+            >
+              Remover
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="btn-ghost"
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          {canEdit && (
+            <button
+              type="submit"
+              form="modal-form"
+              disabled={pending}
+              className="btn-primary"
+            >
+              {pending ? "Salvando…" : "Salvar"}
+            </button>
+          )}
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         <div
           className="px-5 pt-3 flex items-center gap-1"
           style={{ borderBottom: "1px solid var(--b-soft)" }}
@@ -343,13 +383,7 @@ export function UsuarioEditModal({
                   )
                 }
                 disabled={pending || !canEdit}
-                className="text-[13px] px-2.5 py-1.5 rounded-md"
-                style={{
-                  backgroundColor: "var(--ink-3)",
-                  border: "1px solid var(--b-soft)",
-                  color: "var(--fg)",
-                  outline: "none",
-                }}
+                className="input-edit"
               >
                 <option value="vendedor">Usuário</option>
                 <option value="owner">Admin do tenant</option>
@@ -450,55 +484,8 @@ export function UsuarioEditModal({
           </div>
         )}
 
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
-            uid: {target.vendedor.uid.slice(0, 8)}…
-          </span>
-          <div className="flex items-center gap-2">
-            {canEdit && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={pending}
-                className="text-[12px] px-3 py-1.5 rounded-md"
-                style={{
-                  backgroundColor: "var(--rose-bg)",
-                  color: "var(--rose-300)",
-                  border: "1px solid var(--rose-border)",
-                }}
-              >
-                Remover
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
-            >
-              Cancelar
-            </button>
-            {canEdit && (
-              <button
-                type="submit"
-                disabled={pending}
-                className="chip chip-mint text-[12px] px-3 py-1.5"
-              >
-                {pending ? "Salvando…" : "Salvar"}
-              </button>
-            )}
-          </div>
-        </div>
       </form>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -558,13 +545,7 @@ function FieldText({
         value={form[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
         disabled={pending}
-        className="text-[13px] px-2.5 py-1.5 rounded-md"
-        style={{
-          backgroundColor: "var(--ink-3)",
-          border: "1px solid var(--b-soft)",
-          color: "var(--fg)",
-          outline: "none",
-        }}
+        className="input-edit"
       />
     </label>
   );

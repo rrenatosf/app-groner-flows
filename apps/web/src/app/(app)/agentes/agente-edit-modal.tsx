@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ModalShell } from "@/components/modal-shell";
+import { useDirtyForm } from "@/components/use-dirty-form";
 import {
   deleteAgente,
   updateAgenteFields,
@@ -30,14 +32,18 @@ export function AgenteEditModal({
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("info");
   const [form, setForm] = useState<Record<string, string>>({});
+  const [initialForm, setInitialForm] = useState<Record<string, string>>({});
   const [isActive, setIsActive] = useState(true);
+  const [initialIsActive, setInitialIsActive] = useState(true);
   const [humanIntervention, setHumanIntervention] = useState(false);
+  const [initialHumanIntervention, setInitialHumanIntervention] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (open && target) {
       setTab("info");
       setErr(null);
-      setForm({
+      const next = {
         name: target.name ?? "",
         description: target.description ?? "",
         prompt: target.prompt ?? "",
@@ -45,20 +51,20 @@ export function AgenteEditModal({
         maxFollowups: String(target.maxFollowups ?? 5),
         idN8n: target.idN8n ?? "",
         voiceGender: target.voiceGender ?? "",
-      });
+      };
+      setForm(next);
+      setInitialForm(next);
       setIsActive(target.isActive);
+      setInitialIsActive(target.isActive);
       setHumanIntervention(target.humanIntervention);
+      setInitialHumanIntervention(target.humanIntervention);
     }
   }, [open, target]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const isDirty = useDirtyForm(
+    { form: initialForm, isActive: initialIsActive, humanIntervention: initialHumanIntervention },
+    { form, isActive, humanIntervention },
+  );
 
   const pendencias = useMemo(
     () => (target ? pendenciasFor(target) : []),
@@ -117,49 +123,51 @@ export function AgenteEditModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        backgroundColor: "rgba(2,8,5,0.62)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[820px] max-h-[92vh] overflow-y-auto rounded-xl"
-        style={{
-          backgroundColor: "var(--ink-2)",
-          border: "1px solid var(--b-base)",
-          boxShadow: "var(--glow-md)",
-        }}
-      >
-        <div
-          className="px-5 py-4 flex items-center justify-between gap-3"
-          style={{ borderBottom: "1px solid var(--b-soft)" }}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="label-eyebrow">
-              Agente {isSuper ? `· ${target.clienteNome ?? "—"}` : ""}
-            </div>
-            <h2 className="serif text-[20px] leading-tight text-[color:var(--fg)] truncate">
-              {target.name ?? "(sem nome)"}
-            </h2>
-          </div>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      eyebrow={`Agente${isSuper ? ` · ${target.clienteNome ?? "—"}` : ""}`}
+      title={target.name ?? "(sem nome)"}
+      size="full"
+      isDirty={isDirty}
+      onSubmit={() => formRef.current?.requestSubmit()}
+      footer={
+        <>
+          <span className="text-[11px] text-[color:var(--fg-subtle)] mr-auto">
+            id: {target.id}
+          </span>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={pending}
+              className="btn-danger"
+            >
+              Remover
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
-            className="text-[16px] text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]"
+            disabled={pending}
+            className="btn-ghost"
           >
-            ✕
+            Cancelar
           </button>
-        </div>
-
+          {canEdit && (
+            <button
+              type="submit"
+              form="modal-form"
+              disabled={pending}
+              className="btn-primary"
+            >
+              {pending ? "Salvando…" : "Salvar"}
+            </button>
+          )}
+        </>
+      }
+    >
+      <form id="modal-form" ref={formRef} onSubmit={submit}>
         <div
           className="px-5 pt-3 flex items-center gap-1"
           style={{ borderBottom: "1px solid var(--b-soft)" }}
@@ -259,12 +267,8 @@ export function AgenteEditModal({
                 rows={20}
                 placeholder="identidade_agente: |&#10;  - Você é um SDR..."
                 spellCheck={false}
-                className="text-[12.5px] px-2.5 py-1.5 rounded-md"
+                className="input-edit"
                 style={{
-                  backgroundColor: "var(--ink-3)",
-                  border: "1px solid var(--b-soft)",
-                  color: "var(--fg)",
-                  outline: "none",
                   resize: "vertical",
                   fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
                   lineHeight: "1.6",
@@ -316,55 +320,8 @@ export function AgenteEditModal({
           </div>
         )}
 
-        <div
-          className="px-5 py-3 flex items-center justify-between gap-2"
-          style={{ borderTop: "1px solid var(--b-soft)" }}
-        >
-          <span className="text-[11px] text-[color:var(--fg-subtle)]">
-            id: {target.id}
-          </span>
-          <div className="flex items-center gap-2">
-            {canEdit && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={pending}
-                className="text-[12px] px-3 py-1.5 rounded-md"
-                style={{
-                  backgroundColor: "var(--rose-bg)",
-                  color: "var(--rose-300)",
-                  border: "1px solid var(--rose-border)",
-                }}
-              >
-                Remover
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="text-[12px] px-3 py-1.5 rounded-md"
-              style={{
-                backgroundColor: "var(--ink-3)",
-                color: "var(--fg-muted)",
-                border: "1px solid var(--b-soft)",
-              }}
-            >
-              Cancelar
-            </button>
-            {canEdit && (
-              <button
-                type="submit"
-                disabled={pending}
-                className="chip chip-mint text-[12px] px-3 py-1.5"
-              >
-                {pending ? "Salvando…" : "Salvar"}
-              </button>
-            )}
-          </div>
-        </div>
       </form>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -471,13 +428,7 @@ function FieldText({
         value={form[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
         disabled={pending}
-        className="text-[13px] px-2.5 py-1.5 rounded-md"
-        style={{
-          backgroundColor: "var(--ink-3)",
-          border: "1px solid var(--b-soft)",
-          color: "var(--fg)",
-          outline: "none",
-        }}
+        className="input-edit"
       />
     </label>
   );
