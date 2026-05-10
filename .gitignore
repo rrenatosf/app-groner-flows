@@ -1,0 +1,48 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# build output
+.next/
+out/
+build/
+dist/
+
+# testing / coverage
+coverage/
+
+# env (NUNCA commitar — contém SESSION_SECRET, GRONER_ZAP_DEV_TOKEN, DATABASE_URL)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Vercel
+.vercel/
+
+# logs / debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+
+# Screenshots de desenvolvimento (Playwright MCP, prints de debug)
+.playwright-mcp/
+apps/web/.playwright-mcp/
+apps/web/*.png
+images.png
+
+# Claude / agents memory local — não committar memory escrito pelo agente
+.claude/projects/
+.git.backup-old/

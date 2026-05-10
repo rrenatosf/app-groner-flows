@@ -1,0 +1,448 @@
+@import "tailwindcss";
+
+/* ─── Tokens ─────────────────────────────────────────────────────────── */
+
+:root {
+  /* Surface ramp — neutro frio (slate cool) com leve hint verde
+   * Inspirado no Bling: cinzas neutros + verde brand como accent.
+   * Hue 200-210°, saturação baixa (8-12%), luminosidade escalonada. */
+  --ink-0: #0a0f12;
+  --ink-1: #11171b; /* body / canvas */
+  --ink-2: #161e23; /* sidebar, sub-cards */
+  --ink-3: #1c252b; /* card */
+  --ink-4: #242e35; /* hover / active surface */
+  --ink-5: #2e3a42; /* elevated, ring base */
+
+  /* Mint (brand) — alinhada à logo Groner #46c89a. Continua sendo
+   * a cor de identidade — usada em CTA, links, destaques. */
+  --mint-50: #e6fbf1;
+  --mint-100: #c8f4dd;
+  --mint-200: #95e8bd;
+  --mint-300: #5cd89a;
+  --mint-400: #2dc07b; /* CTA primary */
+  --mint-500: #16a263; /* CTA hover */
+  --mint-600: #0f8350;
+  --mint-700: #0b6740;
+  --mint-800: #08502f;
+  --mint-900: #053b22;
+
+  /* Texto neutro frio (não mais tingido de verde). */
+  --fg: #e7ecef; /* off-white neutro */
+  --fg-muted: #aab4bb;
+  --fg-subtle: #6e7780;
+  --fg-disabled: #4a5159;
+
+  /* Borders neutras translúcidas (frio) — não mais mint. */
+  --b-soft: rgba(255, 255, 255, 0.045);
+  --b-base: rgba(255, 255, 255, 0.08);
+  --b-strong: rgba(255, 255, 255, 0.14);
+  --b-bright: rgba(255, 255, 255, 0.22);
+
+  /* Anéis e shadows — focus continua em mint, sombra neutra. */
+  --ring: rgba(70, 200, 154, 0.32);
+  --glow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px -2px rgba(0, 0, 0, 0.3);
+  --glow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.55), 0 6px 18px -8px rgba(0, 0, 0, 0.4);
+  --glow-lg: 0 12px 48px -12px rgba(0, 0, 0, 0.75), 0 16px 56px -24px rgba(0, 0, 0, 0.5);
+
+  /* Acentos de status — Bling usa cores funcionais distintas:
+   * amber (warning), sky (info), rose (danger), violet (secondary). */
+  --amber-300: #fbbf24;
+  --amber-400: #f59e0b;
+  --amber-bg: rgba(251, 191, 36, 0.10);
+  --amber-border: rgba(251, 191, 36, 0.30);
+
+  --sky-300: #7dd3fc;
+  --sky-400: #38bdf8;
+  --sky-bg: rgba(56, 189, 248, 0.10);
+  --sky-border: rgba(56, 189, 248, 0.30);
+
+  --rose-300: #fca5a5;
+  --rose-400: #f87171;
+  --rose-bg: rgba(248, 113, 113, 0.08);
+  --rose-border: rgba(248, 113, 113, 0.28);
+
+  --violet-300: #c4b5fd;
+  --violet-400: #a78bfa;
+  --violet-bg: rgba(167, 139, 250, 0.10);
+  --violet-border: rgba(167, 139, 250, 0.28);
+
+  /* Tipografia */
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@theme inline {
+  --color-mint-50: var(--mint-50);
+  --color-mint-100: var(--mint-100);
+  --color-mint-200: var(--mint-200);
+  --color-mint-300: var(--mint-300);
+  --color-mint-400: var(--mint-400);
+  --color-mint-500: var(--mint-500);
+  --color-mint-600: var(--mint-600);
+  --color-mint-700: var(--mint-700);
+  --color-mint-800: var(--mint-800);
+  --color-mint-900: var(--mint-900);
+
+  --color-ink-0: var(--ink-0);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-ink-5: var(--ink-5);
+
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────── */
+
+* {
+  border-color: var(--b-soft);
+}
+
+html,
+body {
+  background-color: var(--ink-1);
+  color: var(--fg);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  position: relative;
+}
+
+/* Atmosfera: glow radial neutro com leve toque mint */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 18% 0%, rgba(70, 200, 154, 0.04), transparent 60%),
+    radial-gradient(ellipse 60% 60% at 100% 100%, rgba(255, 255, 255, 0.02), transparent 55%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.43, 0 0 0 0 0.78, 0 0 0 0 0.6, 0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Microinterações ────────────────────────────────────────────────── */
+
+@keyframes lift-in {
+  from {
+    opacity: 1;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lift-in {
+  animation: lift-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.fade-in {
+  animation: fade-in 240ms ease-out both;
+}
+
+.scale-in {
+  animation: scale-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.stagger > * {
+  animation: lift-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 20ms; }
+.stagger > *:nth-child(3) { animation-delay: 40ms; }
+.stagger > *:nth-child(4) { animation-delay: 60ms; }
+.stagger > *:nth-child(5) { animation-delay: 80ms; }
+.stagger > *:nth-child(6) { animation-delay: 100ms; }
+.stagger > *:nth-child(7) { animation-delay: 120ms; }
+.stagger > *:nth-child(8) { animation-delay: 140ms; }
+
+/* ─── Componentes utilitários ────────────────────────────────────────── */
+
+.surface {
+  background-color: var(--ink-2);
+  border: 1px solid var(--b-base);
+  border-radius: 12px;
+  box-shadow: var(--glow-sm);
+}
+
+.surface-flat {
+  background-color: var(--ink-2);
+  border: 1px solid var(--b-soft);
+  border-radius: 10px;
+}
+
+/* Bloco de info dentro de modais. */
+.info-block {
+  background-color: var(--ink-3);
+  border: 1px solid var(--b-base);
+  border-radius: 8px;
+  padding: 11px 13px;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.info-block:hover {
+  border-color: var(--b-strong);
+}
+
+.surface-raised {
+  background-color: var(--ink-2);
+  border: 1px solid var(--b-base);
+  border-radius: 14px;
+  box-shadow: var(--glow-md);
+}
+
+.kpi-card {
+  position: relative;
+  background-color: var(--ink-2);
+  border: 1px solid var(--b-base);
+  border-radius: 12px;
+  padding: 18px 20px;
+  overflow: hidden;
+  transition: transform 200ms ease, border-color 200ms ease, background 200ms ease;
+}
+
+.kpi-card:hover {
+  background-color: var(--ink-3);
+  border-color: var(--b-strong);
+  transform: translateY(-1px);
+}
+
+.serif {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.028em;
+}
+
+.numerics {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.label-eyebrow {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+.divider {
+  border-top: 1px solid var(--b-soft);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--mint-400);
+  color: #04140c;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--mint-500);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  transition: transform 120ms ease, background 160ms ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--mint-300);
+  transform: translateY(-0.5px);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--b-soft);
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.btn-ghost:hover {
+  color: var(--fg);
+  background: var(--ink-3);
+  border-color: var(--b-base);
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  background-color: var(--ink-2);
+  border: 1px solid var(--b-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--fg);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--fg-disabled);
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--mint-400);
+  background-color: var(--ink-3);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--b-base);
+  background: var(--ink-3);
+  color: var(--fg-muted);
+}
+
+.chip-mint {
+  border-color: rgba(70, 200, 154, 0.32);
+  background: rgba(70, 200, 154, 0.08);
+  color: var(--mint-200);
+}
+
+.chip-amber {
+  border-color: rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.08);
+  color: #fcd34d;
+}
+
+.chip-red {
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(248, 113, 113, 0.08);
+  color: #fca5a5;
+}
+
+/* Tabela editorial — estilo Bling-minimalista
+ * - thead sem fundo; só uma linha fina embaixo
+ * - linhas separadas por borda sutil única (sem zebra)
+ * - hover muito leve, sem deslocamento visual
+ * - tipografia compacta, espaçamento horizontal generoso
+ */
+.table-editorial {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+  background: var(--ink-2);
+  border: 1px solid var(--b-soft);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.table-editorial thead {
+  background: var(--ink-3);
+}
+
+.table-editorial th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--fg-muted);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--b-base);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.table-editorial td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--b-soft);
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.table-editorial tbody tr {
+  transition: background 120ms ease;
+}
+
+/* Zebra muito sutil pra ajudar varredura horizontal em listas grandes. */
+.table-editorial tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.012);
+}
+
+.table-editorial tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.table-editorial tbody tr:last-child td {
+  border-bottom: none;
+}

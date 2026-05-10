@@ -1,0 +1,99 @@
+import "server-only";
+import { and, asc, eq, gte, ilike, lte, or } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { agendamentos, clientes, leads, type Vendedor } from "@/lib/db/schema";
+
+export type AgendamentoRow = {
+  id: number;
+  dataAgendamento: Date | null;
+  statusAgendamento: string | null;
+  observacaoAgendamento: string | null;
+  leadId: number | null;
+  leadNome: string | null;
+  leadTelefone: string | null;
+  vendedorId: number | null;
+  vendedorNome: string | null;
+};
+
+export async function listAgendamentos({
+  clienteId,
+  restrictToUserId,
+  upcomingOnly = false,
+  q,
+  from,
+  to,
+}: {
+  clienteId: number;
+  restrictToUserId?: number;
+  upcomingOnly?: boolean;
+  q?: string;
+  from?: Date;
+  to?: Date;
+}): Promise<AgendamentoRow[]> {
+  // Carrega vendedores primeiro (jsonb do cliente). Necessário para resolver
+  // nome via ID e também para ampliar busca por nome do vendedor (já que
+  // não há mais tabela usuarios pra usar em ilike).
+  const [clienteRow] = await db
+    .select({ vendedores: clientes.vendedores })
+    .from(clientes)
+    .where(eq(clientes.id, clienteId))
+    .limit(1);
+  const vendedoresArr: Vendedor[] = Array.isArray(clienteRow?.vendedores)
+    ? (clienteRow.vendedores as Vendedor[])
+    : [];
+  const vendedorNomeById = new Map<number, string | null>();
+  for (const v of vendedoresArr) vendedorNomeById.set(v.id, v.nome ?? null);
+
+  // Se há query e ela bate em algum nome de vendedor, capturar IDs para incluir no filtro.
+  let vendedorIdsMatch: number[] = [];
+  if (q && q.trim()) {
+    const term = q.trim().toLowerCase();
+    vendedorIdsMatch = vendedoresArr
+      .filter((v) => (v.nome ?? "").toLowerCase().includes(term))
+      .map((v) => v.id);
+  }
+
+  const filters = [eq(leads.clienteId, clienteId)];
+  if (restrictToUserId) filters.push(eq(leads.vendedorId, restrictToUserId));
+  if (upcomingOnly) filters.push(gte(agendamentos.dataAgendamento, new Date()));
+  if (from) filters.push(gte(agendamentos.dataAgendamento, from));
+  if (to) filters.push(lte(agendamentos.dataAgendamento, to));
+  if (q && q.trim()) {
+    const like = `%${q.trim()}%`;
+    const orParts = [
+      ilike(leads.nome, like),
+      ilike(leads.telefone, like),
+      ilike(agendamentos.statusAgendamento, like),
+      ilike(agendamentos.observacaoAgendamento, like),
+    ];
+    if (vendedorIdsMatch.length > 0) {
+      // Drizzle: filtra leads cujo vendedor_id está nos matches
+      orParts.push(
+        or(...vendedorIdsMatch.map((id) => eq(leads.vendedorId, id)))!,
+      );
+    }
+    filters.push(or(...orParts)!);
+  }
+
+  const rows = await db
+    .select({
+      id: agendamentos.id,
+      dataAgendamento: agendamentos.dataAgendamento,
+      statusAgendamento: agendamentos.statusAgendamento,
+      observacaoAgendamento: agendamentos.observacaoAgendamento,
+      leadId: leads.id,
+      leadNome: leads.nome,
+      leadTelefone: leads.telefone,
+      vendedorId: leads.vendedorId,
+    })
+    .from(agendamentos)
+    .innerJoin(leads, eq(leads.id, agendamentos.leadId))
+    .where(and(...filters))
+    .orderBy(asc(agendamentos.dataAgendamento));
+
+  return rows.map((r) => ({
+    ...r,
+    vendedorNome:
+      r.vendedorId !== null ? vendedorNomeById.get(r.vendedorId) ?? null : null,
+  }));
+}

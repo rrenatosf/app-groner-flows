@@ -1,0 +1,143 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  setLeadVendedorAction,
+  listVendedoresParaAtribuirAction,
+} from "./actions";
+
+type VendedorOption = { id: number; nome: string; role: string };
+
+export function AssignVendedorCell({
+  leadId,
+  currentNome,
+  currentId,
+}: {
+  leadId: number;
+  currentNome: string | null;
+  currentId: number | null;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [vendedores, setVendedores] = useState<VendedorOption[]>([]);
+  const [pending, start] = useTransition();
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    void listVendedoresParaAtribuirAction().then((vs) => {
+      setVendedores(vs);
+      setLoaded(true);
+    });
+  }, [open, loaded]);
+
+  function commit(next: number | null) {
+    start(async () => {
+      const fd = new FormData();
+      fd.set("leadId", String(leadId));
+      if (next !== null) fd.set("vendedorId", String(next));
+      else fd.set("vendedorId", "");
+      try {
+        await setLeadVendedorAction(fd);
+        setOpen(false);
+        router.refresh();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "Erro ao atribuir.");
+      }
+    });
+  }
+
+  // Visual: se já tem vendedor, mostra nome com lápis discreto.
+  if (currentId !== null && currentNome) {
+    if (!open) {
+      return (
+        <span
+          className="group inline-flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span>{currentNome}</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(true);
+            }}
+            className="text-[10.5px] text-[color:var(--fg-subtle)] hover:text-[color:var(--mint-300)] opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Trocar vendedor"
+            aria-label="Trocar vendedor"
+          >
+            ✎
+          </button>
+        </span>
+      );
+    }
+  }
+
+  // Sem vendedor — mostra botão "atribuir" sempre visível
+  if (currentId === null && !open) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        className="text-[11px] px-2 py-0.5 rounded-md"
+        style={{
+          backgroundColor: "rgba(70,200,154,0.10)",
+          color: "var(--mint-200)",
+          border: "1px solid rgba(70,200,154,0.32)",
+        }}
+        title="Atribuir vendedor a este lead"
+      >
+        + Atribuir
+      </button>
+    );
+  }
+
+  // Open: select dropdown
+  return (
+    <span
+      className="inline-flex items-center gap-1.5"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <select
+        autoFocus
+        defaultValue={currentId !== null ? String(currentId) : ""}
+        disabled={pending || !loaded}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          const val = e.target.value;
+          commit(val === "" ? null : Number(val));
+        }}
+        className="rounded-md py-0.5 px-1.5 text-[11.5px] focus:outline-none"
+        style={{
+          backgroundColor: "var(--ink-3)",
+          color: "var(--fg)",
+          border: "1px solid var(--mint-700)",
+        }}
+      >
+        <option value="">— sem vendedor (IA) —</option>
+        {vendedores.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.nome}
+            {v.role === "owner" ? " (admin)" : ""}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(false);
+        }}
+        disabled={pending}
+        className="text-[10.5px] px-1.5 py-0.5 rounded text-[color:var(--fg-subtle)] hover:text-[#fca5a5]"
+        title="Cancelar"
+      >
+        ✕
+      </button>
+    </span>
+  );
+}

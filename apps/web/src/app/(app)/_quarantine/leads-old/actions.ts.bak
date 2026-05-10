@@ -1,0 +1,37 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { readSession } from "@/lib/auth/session";
+import { requireOwner } from "@/lib/auth/guard";
+import { setLeadVendedor } from "@/server/services/mutations";
+import { loadVendedores } from "@/server/services/usuarios";
+
+export async function setLeadVendedorAction(formData: FormData) {
+  const session = requireOwner(await readSession());
+  const leadId = Number(formData.get("leadId"));
+  const raw = String(formData.get("vendedorId") ?? "");
+  if (!Number.isFinite(leadId)) throw new Error("leadId inválido");
+
+  let vendedorId: number | null = null;
+  if (raw !== "") {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) throw new Error("vendedorId inválido");
+    vendedorId = n;
+  }
+
+  await setLeadVendedor(session.clienteId, leadId, vendedorId);
+  revalidatePath("/leads");
+  revalidatePath("/usuarios");
+}
+
+export async function listVendedoresParaAtribuirAction() {
+  const session = requireOwner(await readSession());
+  const vs = await loadVendedores(session.clienteId);
+  return vs
+    .filter((v) => v.is_active)
+    .map((v) => ({
+      id: v.id,
+      nome: v.nome ?? `Usuário #${v.id}`,
+      role: v.role,
+    }));
+}

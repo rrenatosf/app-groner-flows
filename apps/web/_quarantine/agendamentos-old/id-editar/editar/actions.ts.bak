@@ -1,0 +1,32 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { readSession } from "@/lib/auth/session";
+import { requireOwner } from "@/lib/auth/guard";
+import { updateAgendamento } from "@/server/services/mutations";
+
+export async function saveAgendamentoAction(
+  agendamentoId: number,
+  formData: FormData,
+) {
+  const session = requireOwner(await readSession());
+
+  const dataStr = String(formData.get("dataAgendamento") ?? "").trim();
+  const data = dataStr ? new Date(dataStr) : null;
+
+  await updateAgendamento(session.clienteId, agendamentoId, {
+    dataAgendamento: data,
+    statusAgendamento: orNull(formData.get("statusAgendamento")),
+    observacaoAgendamento: orNull(formData.get("observacaoAgendamento")),
+  });
+
+  revalidatePath("/agendamentos");
+  revalidatePath(`/agendamentos/${agendamentoId}/editar`);
+  redirect("/agendamentos");
+}
+
+function orNull(v: FormDataEntryValue | null) {
+  const s = String(v ?? "").trim();
+  return s.length === 0 ? null : s;
+}

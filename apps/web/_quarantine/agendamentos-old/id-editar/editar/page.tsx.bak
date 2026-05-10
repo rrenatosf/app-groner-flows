@@ -1,0 +1,100 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { agendamentos, leads } from "@/lib/db/schema";
+import { readSession } from "@/lib/auth/session";
+import { isOwner } from "@/lib/auth/guard";
+import { PageHeader } from "@/components/page-header";
+import { Field, Select, TextArea } from "@/components/form-field";
+import { SaveButton } from "@/components/save-button";
+import { saveAgendamentoAction } from "./actions";
+
+function toLocalInput(d: Date | null): string {
+  if (!d) return "";
+  const dt = new Date(d);
+  const tzOff = dt.getTimezoneOffset() * 60000;
+  return new Date(dt.getTime() - tzOff).toISOString().slice(0, 16);
+}
+
+export default async function EditAgendamentoPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const session = await readSession();
+  if (!session) return null;
+  if (!isOwner(session)) redirect("/agendamentos");
+
+  const { id } = await params;
+  const agId = Number(id);
+  if (!Number.isFinite(agId)) notFound();
+
+  const ag = await db.query.agendamentos.findFirst({
+    where: eq(agendamentos.id, agId),
+  });
+  if (!ag) notFound();
+
+  // valida ownership via lead → cliente
+  if (ag.leadId) {
+    const ld = await db.query.leads.findFirst({
+      where: eq(leads.id, ag.leadId),
+    });
+    if (!ld || ld.clienteId !== session.clienteId) notFound();
+  }
+
+  const action = saveAgendamentoAction.bind(null, agId);
+
+  return (
+    <>
+      <PageHeader
+        title={`Editar agendamento #${ag.id}`}
+        actions={
+          <Link
+            href="/agendamentos"
+            className="text-sm text-[color:var(--fg-muted)] hover:text-[color:var(--fg)]"
+          >
+            ← Voltar
+          </Link>
+        }
+      />
+      <div className="px-6 pb-12">
+        <form action={action} className="grid gap-5 max-w-2xl">
+          <Field
+            label="Data e hora"
+            name="dataAgendamento"
+            type="datetime-local"
+            defaultValue={toLocalInput(ag.dataAgendamento)}
+          />
+          <Select
+            label="Status"
+            name="statusAgendamento"
+            defaultValue={ag.statusAgendamento ?? ""}
+            options={[
+              { value: "agendado", label: "Agendado" },
+              { value: "confirmado", label: "Confirmado" },
+              { value: "concluido", label: "Concluído" },
+              { value: "cancelado", label: "Cancelado" },
+              { value: "no_show", label: "No-show" },
+            ]}
+          />
+          <TextArea
+            label="Observação"
+            name="observacaoAgendamento"
+            defaultValue={ag.observacaoAgendamento}
+            rows={4}
+          />
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Link
+              href="/agendamentos"
+              className="text-sm text-[color:var(--fg-muted)] hover:text-[color:var(--fg)] px-3 py-2"
+            >
+              Cancelar
+            </Link>
+            <SaveButton />
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}

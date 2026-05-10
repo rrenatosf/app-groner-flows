@@ -1,0 +1,309 @@
+import { readSession } from "@/lib/auth/session";
+import { listLeadsByCliente } from "@/server/services/leads";
+import { PageHeader } from "@/components/page-header";
+import { SearchBox } from "@/components/search-box";
+import { DetailModal } from "@/components/detail-modal";
+import { DetailRow } from "@/components/detail-row";
+import { AssignVendedorCell } from "./assign-vendedor";
+import { TableHeader } from "@/components/table-header";
+import { resolveVisibleCols, type ColumnDef } from "@/components/table-columns";
+
+const LEADS_COLS: ColumnDef[] = [
+  { key: "nome", label: "Nome", type: "text", align: "left" },
+  { key: "telefone", label: "Telefone", type: "text", align: "left" },
+  { key: "etapaNome", label: "Etapa", type: "text", align: "left" },
+  { key: "statusNome", label: "Status", type: "text", align: "left" },
+  { key: "vendedorNome", label: "Vendedor", type: "text", align: "left" },
+  { key: "stepFollowup", label: "Tentativas Follow", type: "number", align: "right" },
+  { key: "statusFollowup", label: "Status Follow", type: "text", align: "left" },
+  { key: "proximoFollowup", label: "Próximo Follow", type: "date", align: "left" },
+  { key: "createdAt", label: "Recebido em", type: "date", align: "left" },
+];
+
+const LEADS_DEFAULT_VISIBLE = [
+  "nome",
+  "telefone",
+  "etapaNome",
+  "statusNome",
+  "vendedorNome",
+  "createdAt",
+];
+
+const dt = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeStyle: "short",
+  timeZone: "America/Sao_Paulo",
+});
+const dtDateOnly = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeZone: "America/Sao_Paulo",
+});
+
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; detail?: string; cols?: string }>;
+}) {
+  const session = await readSession();
+  if (!session) return null;
+  const { q, detail, cols } = await searchParams;
+  const restrict = session.kind === "usuario" ? session.userId : undefined;
+  const rows = await listLeadsByCliente(session.clienteId, {
+    restrictToUserId: restrict,
+    q,
+  });
+  const visibleCols = resolveVisibleCols(cols, LEADS_COLS, LEADS_DEFAULT_VISIBLE);
+  const showCol = (k: string) => visibleCols.includes(k);
+
+  const detailLead = detail ? rows.find((l) => l.id === Number(detail)) : null;
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Pipeline"
+        title="Leads"
+        subtitle={
+          session.kind === "cliente"
+            ? "Todos os leads do tenant. Vendedor responsável na coluna específica."
+            : "Apenas seus leads. Cliente vê todos os vendedores."
+        }
+        actions={
+          <SearchBox placeholder="Buscar por nome, telefone, etapa, status..." />
+        }
+      />
+
+      <div className="px-7 pb-12 space-y-3">
+        <TableHeader
+          shown={rows.length}
+          total={rows.length}
+          isQuery={!!q}
+          itemLabel={{ singular: "lead", plural: "leads" }}
+          allColumns={LEADS_COLS}
+          visibleCols={visibleCols}
+          newAction={null}
+        />
+
+        <div
+          className="overflow-hidden rounded-xl"
+          style={{
+            backgroundColor: "var(--ink-2)",
+            border: "1px solid var(--b-soft)",
+          }}
+        >
+          <table className="table-editorial">
+            <thead>
+              <tr>
+                {showCol("nome") && <th>Nome</th>}
+                {showCol("telefone") && <th>Telefone</th>}
+                {showCol("etapaNome") && <th>Etapa</th>}
+                {showCol("statusNome") && <th>Status</th>}
+                {showCol("vendedorNome") && <th>Vendedor</th>}
+                {showCol("stepFollowup") && (
+                  <th className="text-center">Tentativas Follow</th>
+                )}
+                {showCol("statusFollowup") && <th>Status Follow</th>}
+                {showCol("proximoFollowup") && <th>Próximo Follow</th>}
+                {showCol("createdAt") && <th>Recebido em</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={visibleCols.length}
+                    className="text-center text-[color:var(--fg-subtle)]"
+                  >
+                    {q
+                      ? `Nenhum lead corresponde a "${q}".`
+                      : "Nenhum lead recebido ainda."}
+                  </td>
+                </tr>
+              )}
+              {rows.map((l) => {
+                return (
+                  <DetailRow key={l.id} detailId={l.id}>
+                    {showCol("nome") && (
+                      <td className="font-medium">
+                        <span className="hover:text-[color:var(--mint-300)]">
+                          {l.nome ?? `Lead #${l.id}`}
+                        </span>
+                      </td>
+                    )}
+                    {showCol("telefone") && (
+                      <td className="text-[color:var(--fg-muted)] numerics">
+                        {l.telefone ?? "—"}
+                      </td>
+                    )}
+                    {showCol("etapaNome") && <td>{l.etapaNome ?? "—"}</td>}
+                    {showCol("statusNome") && <td>{l.statusNome ?? "—"}</td>}
+                    {showCol("vendedorNome") && (
+                      <td>
+                        <AssignVendedorCell
+                          leadId={l.id}
+                          currentNome={l.vendedorNome}
+                          currentId={l.vendedorId}
+                        />
+                      </td>
+                    )}
+                    {showCol("stepFollowup") && (
+                      <td className="text-center numerics">
+                        {l.stepFollowup ?? "—"}
+                      </td>
+                    )}
+                    {showCol("statusFollowup") && (
+                      <td>
+                        <FollowupBadge value={l.statusFollowup} />
+                      </td>
+                    )}
+                    {showCol("proximoFollowup") && (
+                      <td className="numerics text-[color:var(--fg-muted)]">
+                        {l.proximoFollowup
+                          ? dt.format(new Date(l.proximoFollowup))
+                          : "—"}
+                      </td>
+                    )}
+                    {showCol("createdAt") && (
+                      <td className="numerics text-[color:var(--fg-subtle)]">
+                        {dtDateOnly.format(new Date(l.createdAt))}
+                      </td>
+                    )}
+                  </DetailRow>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {detailLead && (
+        <DetailModal
+          eyebrow="Lead"
+          title={detailLead.nome ?? `Lead #${detailLead.id}`}
+          subtitle={
+            detailLead.telefone
+              ? `Telefone ${detailLead.telefone}`
+              : undefined
+          }
+        >
+          <div className="space-y-6">
+            <section>
+              <div className="label-eyebrow mb-3">Identificação</div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Item k="Nome" v={detailLead.nome ?? "—"} />
+                <Item k="Telefone" v={detailLead.telefone ?? "—"} />
+                <Item
+                  k="Recebido em"
+                  v={dt.format(new Date(detailLead.createdAt))}
+                />
+              </div>
+            </section>
+
+            <section>
+              <div className="label-eyebrow mb-3">CRM</div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Item k="Lead ID (CRM)" v={detailLead.leadId ?? "—"} />
+                <Item k="Projeto ID" v={detailLead.projetoId ?? "—"} />
+                <Item k="Etapa" v={detailLead.etapaNome ?? "—"} />
+                <Item k="Etapa ID" v={detailLead.etapaId ?? "—"} />
+                <Item k="Status" v={detailLead.statusNome ?? "—"} />
+                <Item k="Status ID" v={detailLead.statusId ?? "—"} />
+              </div>
+            </section>
+
+            <section>
+              <div className="label-eyebrow mb-3">Atribuição</div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Item
+                  k="Vendedor"
+                  v={detailLead.vendedorNome ?? "IA (sem vendedor)"}
+                />
+                <Item
+                  k="Sessão"
+                  v={detailLead.sessionId ?? "—"}
+                />
+                <Item
+                  k="Agendamento"
+                  v={
+                    detailLead.agendamentoId
+                      ? `#${detailLead.agendamentoId}`
+                      : "—"
+                  }
+                />
+              </div>
+            </section>
+
+            <section>
+              <div className="label-eyebrow mb-3">Follow-up</div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Item
+                  k="Tentativas Follow"
+                  v={
+                    detailLead.stepFollowup !== null
+                      ? String(detailLead.stepFollowup)
+                      : "—"
+                  }
+                />
+                <Item
+                  k="Status Follow"
+                  v={detailLead.statusFollowup ?? "—"}
+                />
+                <Item
+                  k="Próximo Follow"
+                  v={
+                    detailLead.proximoFollowup
+                      ? dt.format(new Date(detailLead.proximoFollowup))
+                      : "—"
+                  }
+                />
+              </div>
+            </section>
+          </div>
+        </DetailModal>
+      )}
+    </>
+  );
+}
+
+function FollowupBadge({ value }: { value: string | null }) {
+  if (!value) return <span className="text-[color:var(--fg-subtle)]">—</span>;
+  const v = value.toLowerCase();
+  let bg = "rgba(70,200,154,0.08)";
+  let border = "var(--b-base)";
+  let color = "var(--fg-muted)";
+  if (v.includes("qualif")) {
+    bg = "rgba(70,200,154,0.12)";
+    border = "var(--b-strong)";
+    color = "var(--mint-200)";
+  } else if (v.includes("desq") || v.includes("cancel")) {
+    bg = "rgba(248,113,113,0.08)";
+    border = "rgba(248,113,113,0.28)";
+    color = "#fca5a5";
+  } else if (v.includes("aguard") || v.includes("pend")) {
+    bg = "rgba(251,191,36,0.08)";
+    border = "rgba(251,191,36,0.28)";
+    color = "#fcd34d";
+  }
+  return (
+    <span
+      className="inline-block rounded-md px-2 py-0.5 text-[11px]"
+      style={{
+        backgroundColor: bg,
+        border: `1px solid ${border}`,
+        color,
+      }}
+    >
+      {value}
+    </span>
+  );
+}
+
+function Item({ k, v }: { k: string; v: string }) {
+  return (
+    <div
+      className="info-block"
+    >
+      <p className="label-eyebrow">{k}</p>
+      <p className="numerics text-[13px] mt-1 break-words">{v}</p>
+    </div>
+  );
+}
