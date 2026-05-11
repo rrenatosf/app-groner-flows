@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ModalShell } from "@/components/modal-shell";
 import { useDirtyForm } from "@/components/use-dirty-form";
@@ -9,9 +9,12 @@ import {
   type CreateCatalogoAutomacaoInput,
 } from "./actions";
 import {
+  type DadosConfigGroup,
   getDefaultAutomacaoConfig,
   validateDadosConfiguracoes,
+  validateSnakeCaseKeys,
 } from "./dados-config-shape";
+import { TemplateBuilder } from "./_form/TemplateBuilder";
 
 export function AutomacaoNovoModal({
   open,
@@ -29,6 +32,12 @@ export function AutomacaoNovoModal({
   const [templateValid, setTemplateValid] = useState(true);
   const [templateErr, setTemplateErr] = useState<string | null>(null);
   const [initialTemplate, setInitialTemplate] = useState("[]");
+  const [comentarios, setComentarios] = useState<Record<string, string>>(
+    {},
+  );
+  const [initialComentarios, setInitialComentarios] = useState<
+    Record<string, string>
+  >({});
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -47,13 +56,31 @@ export function AutomacaoNovoModal({
       setInitialTemplate(initial);
       setTemplateValid(true);
       setTemplateErr(null);
+      setComentarios({});
+      setInitialComentarios({});
     }
   }, [open]);
 
   const isDirty = useDirtyForm(
-    { form: {}, isActive: true, templateText: initialTemplate },
-    { form, isActive, templateText },
+    {
+      form: {},
+      isActive: true,
+      templateText: initialTemplate,
+      comentarios: initialComentarios,
+    },
+    { form, isActive, templateText, comentarios },
   );
+
+  // Parse pro builder consumir. Erro vira array vazio — Validar mostra detalhe.
+  const tplParsed = useMemo<DadosConfigGroup[]>(() => {
+    try {
+      const p = JSON.parse(templateText);
+      if (!Array.isArray(p)) return [];
+      return p as DadosConfigGroup[];
+    } catch {
+      return [];
+    }
+  }, [templateText]);
 
   if (!open) return null;
 
@@ -73,6 +100,8 @@ export function AutomacaoNovoModal({
     }
     const v = validateDadosConfiguracoes(parsed);
     if (!v.ok) return { ok: false, error: v.error };
+    const sk = validateSnakeCaseKeys(v.v);
+    if (!sk.ok) return { ok: false, error: sk.error };
     return { ok: true, v: v.v };
   }
 
@@ -111,6 +140,7 @@ export function AutomacaoNovoModal({
       dadosConfiguracoesTemplate: tplRes.v as ReturnType<
         typeof getDefaultAutomacaoConfig
       >,
+      dadosComentarios: comentarios,
     };
     startTransition(async () => {
       const res = await createCatalogoAutomacao(input);
@@ -249,36 +279,10 @@ export function AutomacaoNovoModal({
           </label>
 
           <div className="sm:col-span-2 space-y-2">
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] uppercase tracking-wider text-[color:var(--fg-subtle)]">
-                Template de configurações (JSON)
-              </span>
-              <textarea
-                value={templateText}
-                onChange={(e) => {
-                  setTemplateText(e.target.value);
-                  setTemplateValid(true);
-                  setTemplateErr(null);
-                }}
-                disabled={pending}
-                rows={14}
-                spellCheck={false}
-                className={`input-edit${templateValid ? "" : " is-error"}`}
-                style={{
-                  resize: "vertical",
-                  fontFamily:
-                    "var(--font-geist-mono), ui-monospace, monospace",
-                  lineHeight: "1.6",
-                  minHeight: "260px",
-                  tabSize: 2,
-                }}
-              />
-            </label>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] text-[color:var(--fg-subtle)]">
-                Esse template será copiado pra cada cliente que receber a
-                automação. Use o botão pra carregar o padrão (3 grupos).
-              </p>
+              <span className="text-[11px] uppercase tracking-wider text-[color:var(--fg-subtle)]">
+                Template de configurações
+              </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -304,6 +308,21 @@ export function AutomacaoNovoModal({
                 </button>
               </div>
             </div>
+            <TemplateBuilder
+              value={tplParsed}
+              onChange={(next) => {
+                setTemplateText(JSON.stringify(next, null, 2));
+                setTemplateValid(true);
+                setTemplateErr(null);
+              }}
+              meta={comentarios}
+              onMetaChange={setComentarios}
+              disabled={pending}
+            />
+            <p className="text-[11px] text-[color:var(--fg-subtle)]">
+              Esse template será copiado pra cada cliente que receber a
+              automação. Cada grupo (título) contém itens com nome e tipo.
+            </p>
             {!templateValid && templateErr && (
               <div
                 className="text-[12px] px-3 py-2 rounded-md"

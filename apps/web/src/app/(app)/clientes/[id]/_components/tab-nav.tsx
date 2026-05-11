@@ -7,6 +7,11 @@ export type TabItem = {
   /** Path absoluto da rota (ex: "/clientes/123/dados"). */
   href: string;
   label: string;
+  /** Quando true, marca como ativo só se `pathname === href` exatamente.
+   *  Útil pra abas-índice que viraram pais de sub-rotas (ex: aba "Lista
+   *  de agentes" não deve ficar ativa quando user está em sub-rota
+   *  irmã como "/agentes/vendedores"). */
+  exactMatch?: boolean;
 };
 
 /**
@@ -26,10 +31,12 @@ export function TabNav({ tabs }: { tabs: TabItem[] }) {
     >
       {tabs.map((tab) => {
         // Match por prefixo — uma sub-rota como /clientes/1/lojas/abc
-        // ainda destaca a aba "Lojas".
-        const isActive =
-          pathname === tab.href ||
-          pathname.startsWith(tab.href + "/");
+        // ainda destaca a aba "Lojas". Override `exactMatch` desliga
+        // o prefixo (necessário pra abas-índice).
+        const isActive = tab.exactMatch
+          ? pathname === tab.href
+          : pathname === tab.href ||
+            pathname.startsWith(tab.href + "/");
         return (
           <Link
             key={tab.href}

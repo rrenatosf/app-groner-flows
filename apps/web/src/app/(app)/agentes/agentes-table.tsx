@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { SearchBox } from "@/components/search-box";
 import {
+  AbrirChip,
   BooleanToggle,
   ColumnPicker,
   HealthToggle,
@@ -437,7 +438,7 @@ export function AgentesTable({
             d.editKind === "boolean" && editable && !isEditing;
           const tdClass =
             (d.align === "center" ? "text-center" : "") +
-            (d.key === "name" ? " font-medium" : "");
+            (d.key === "name" ? " font-medium cell-abrir" : "");
           return (
             <td
               key={d.key}
@@ -528,6 +529,14 @@ export function AgentesTable({
                     >
                       ✎
                     </button>
+                  )}
+                  {d.key === "name" && (
+                    <AbrirChip
+                      onClick={() => setEditTarget(r)}
+                      ariaLabel={`Abrir configurações de ${r.name ?? `agente #${r.id}`}`}
+                      title="Abrir configurações do agente"
+                      floatRight
+                    />
                   )}
                   {d.key === "prompt" && (
                     <button

@@ -1,5 +1,5 @@
 import { forbidden } from "next/navigation";
-import { loadClienteOrForbid } from "../_data";
+import { loadClienteOrForbid } from "../../_data";
 import { ColunasCrmForm } from "./colunas-crm-form";
 
 export default async function ColunasCrmPage({

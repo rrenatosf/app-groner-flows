@@ -5,13 +5,13 @@ import {
   leads,
   type Vendedor,
 } from "@/lib/db/schema";
-import { LeadsTable } from "../../../../../leads/leads-table";
+import { LeadsTable } from "../../../../../../leads/leads-table";
 import {
   resolveVendedorNome,
   type LeadRow,
-} from "../../../../../leads/saude-lead";
-import type { VendedorOption } from "../../../../../leads/actions";
-import { loadClienteOrForbid, loadVendedoresFromCliente } from "../../../_data";
+} from "../../../../../../leads/saude-lead";
+import type { VendedorOption } from "../../../../../../leads/actions";
+import { loadClienteOrForbid, loadVendedoresFromCliente } from "../../../../_data";
 import { loadVendedor } from "../_data";
 import { isClienteAdminReadOnly } from "@/lib/auth/guard";
 

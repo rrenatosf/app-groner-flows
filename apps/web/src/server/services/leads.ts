@@ -63,6 +63,7 @@ export async function listLeadsByCliente(
         statusFollowup: leads.statusFollowup,
         proximoFollowup: leads.proximoFollowup,
         sessionId: leads.sessionId,
+        clienteAutomacaoId: leads.clienteAutomacaoId,
       })
       .from(leads)
       .where(and(...filters))

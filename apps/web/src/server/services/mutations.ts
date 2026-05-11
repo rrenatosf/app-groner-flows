@@ -203,7 +203,9 @@ export async function updateCliente(
           id: string;
           slug: string;
           tipo: "inicial" | "qualificacao" | "desqualificacao";
-          notUsed?: boolean;
+          etapa_id: string;
+          etapa_nome: string;
+          not_used: boolean;
         }>
       | null;
   },

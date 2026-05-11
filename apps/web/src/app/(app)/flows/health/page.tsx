@@ -113,7 +113,7 @@ export default async function HealthPage() {
                       </td>
                       <td className="text-right">
                         <Link
-                          href={`/clientes/${row.cliente_id}/vendedores/${row.uid}/horarios`}
+                          href={`/clientes/${row.cliente_id}/agentes/vendedores/${row.uid}/horarios`}
                           className="chip chip-mint text-[10.5px] px-2 py-1"
                         >
                           Configurar horários →

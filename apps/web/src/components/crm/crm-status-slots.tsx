@@ -40,6 +40,7 @@ type SlotDef = {
 type SlotValue = {
   id: string;
   nome: string;
+  etapaId: string;
   etapaNome: string;
   notUsed: boolean;
 };
@@ -90,8 +91,9 @@ export function CrmStatusSlots({
       out[def.slug] = {
         id: found?.id ?? "",
         nome: found?.nome ?? "",
-        etapaNome: "",
-        notUsed: found?.notUsed === true,
+        etapaId: found?.etapa_id ?? "",
+        etapaNome: found?.etapa_nome ?? "",
+        notUsed: found?.not_used === true,
       };
     }
     return out;
@@ -127,7 +129,13 @@ export function CrmStatusSlots({
     debug.log("CrmStatusSlots.clear", { slug });
     setValues((p) => ({
       ...p,
-      [slug]: { id: "", nome: "", etapaNome: "", notUsed: false },
+      [slug]: {
+        id: "",
+        nome: "",
+        etapaId: "",
+        etapaNome: "",
+        notUsed: false,
+      },
     }));
   }
 
@@ -138,6 +146,7 @@ export function CrmStatusSlots({
       [slug]: {
         id: st.id,
         nome: st.nome,
+        etapaId: st.etapaId,
         etapaNome: st.etapaNome,
         notUsed: false,
       },
@@ -152,7 +161,13 @@ export function CrmStatusSlots({
       return {
         ...p,
         [slug]: nextNotUsed
-          ? { id: "", nome: "", etapaNome: "", notUsed: true }
+          ? {
+              id: "",
+              nome: "",
+              etapaId: "",
+              etapaNome: "",
+              notUsed: true,
+            }
           : { ...cur, notUsed: false },
       };
     });
@@ -412,6 +427,18 @@ export function CrmStatusSlots({
             type="hidden"
             name={`nome_${def.slug}`}
             value={values[def.slug].nome}
+            readOnly
+          />
+          <input
+            type="hidden"
+            name={`etapa_id_${def.slug}`}
+            value={values[def.slug].etapaId}
+            readOnly
+          />
+          <input
+            type="hidden"
+            name={`etapa_nome_${def.slug}`}
+            value={values[def.slug].etapaNome}
             readOnly
           />
           <input
@@ -705,7 +732,7 @@ function TipoSection({
       <div
         className={
           tipo === "desqualificacao"
-            ? "grid gap-2 sm:grid-cols-2"
+            ? "flex flex-col gap-2"
             : "space-y-2"
         }
       >

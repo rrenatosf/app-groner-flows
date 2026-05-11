@@ -1,24 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import type { CrmStatus } from "@/server/actions/cliente-crm";
-import type { CrmStatusSlot } from "@/lib/db/schema";
 import { humanizeKey } from "../dados-config-form";
 import { GroupFields } from "./GroupFields";
 import { PendenciasBadge } from "./PendenciasBadge";
 
 /** Card colapsável de UM grupo (objeto com 1 chave). Header mostra nome
- *  + badge de pendências. Conteúdo abre/fecha. */
+ *  + badge de pendências. Conteúdo abre/fecha. CRM context vem via
+ *  `<CrmCtx>` provider em ConfiguracoesForm — não recebe via prop. */
 export function GroupCard({
   groupName,
   groupValue,
   onChange,
   pendencias,
-  crmColunas,
-  liveList,
-  pendingLive,
-  liveErr,
-  refreshLive,
   disabled,
   defaultOpen = true,
 }: {
@@ -26,11 +20,6 @@ export function GroupCard({
   groupValue: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   pendencias: number;
-  crmColunas: CrmStatusSlot[] | null;
-  liveList: CrmStatus[] | null;
-  pendingLive: boolean;
-  liveErr: string | null;
-  refreshLive: () => void;
   disabled?: boolean;
   defaultOpen?: boolean;
 }) {
@@ -78,11 +67,6 @@ export function GroupCard({
             groupName={groupName}
             groupValue={groupValue}
             onChange={onChange}
-            crmColunas={crmColunas}
-            liveList={liveList}
-            pendingLive={pendingLive}
-            liveErr={liveErr}
-            refreshLive={refreshLive}
             disabled={disabled}
           />
         </div>

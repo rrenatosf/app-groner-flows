@@ -72,7 +72,7 @@ const FIELDS: Field[] = [
   { key: "crmTenant", label: "CRM Tenant" },
   { key: "crmOrigemId", label: "CRM Origem" },
   { key: "apiInstanciaNome", label: "Instância (WhatsApp)" },
-  { key: "apiBaseUrl", label: "Base URL", secret: true },
+  { key: "apiBaseUrl", label: "Base URL API", secret: true },
   {
     key: "apiToken",
     label: "API Token",
@@ -276,11 +276,24 @@ export function ClienteEditModal({
         for (const def of slotDefs) {
           const id = String(fd.get(`id_${def.slug}`) ?? "").trim();
           const nome = String(fd.get(`nome_${def.slug}`) ?? "").trim();
-          const notUsed = String(fd.get(`notused_${def.slug}`) ?? "") === "1";
-          if (id || nome || notUsed) anyFilled = true;
-          const slot: CrmStatusSlot = { slug: def.slug, tipo: def.tipo, id, nome };
-          if (notUsed) slot.notUsed = true;
-          slots.push(slot);
+          const etapa_id = String(
+            fd.get(`etapa_id_${def.slug}`) ?? "",
+          ).trim();
+          const etapa_nome = String(
+            fd.get(`etapa_nome_${def.slug}`) ?? "",
+          ).trim();
+          const not_used =
+            String(fd.get(`notused_${def.slug}`) ?? "") === "1";
+          if (id || nome || not_used) anyFilled = true;
+          slots.push({
+            slug: def.slug,
+            tipo: def.tipo,
+            id,
+            nome,
+            etapa_id,
+            etapa_nome,
+            not_used,
+          });
         }
         if (anyFilled) {
           patch.crmStatusColunas = slots;

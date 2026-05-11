@@ -6,12 +6,12 @@
   /* Surface ramp — neutro frio (slate cool) com leve hint verde
    * Inspirado no Bling: cinzas neutros + verde brand como accent.
    * Hue 200-210°, saturação baixa (8-12%), luminosidade escalonada. */
-  --ink-0: #0a0f12;
-  --ink-1: #11171b; /* body / canvas */
-  --ink-2: #161e23; /* sidebar, sub-cards */
-  --ink-3: #1c252b; /* card */
-  --ink-4: #242e35; /* hover / active surface */
-  --ink-5: #2e3a42; /* elevated, ring base */
+  --ink-0: #060a0d;
+  --ink-1: #0c1216; /* body / canvas — mais escuro pra contrastar com sidebar */
+  --ink-2: #182229; /* sidebar, sub-cards — step claro acima do body */
+  --ink-3: #232e36; /* card / tabela — claramente acima da sidebar */
+  --ink-4: #2c3941; /* hover / active surface */
+  --ink-5: #384650; /* elevated, ring base */
 
   /* Mint (brand) — alinhada à logo Groner #46c89a. Continua sendo
    * a cor de identidade — usada em CTA, links, destaques. */
@@ -441,14 +441,14 @@ body > * {
   width: 100%;
   font-size: 13px;
   border-collapse: collapse;
-  background: var(--ink-2);
+  background: var(--ink-3);
   border: 1px solid var(--b-soft);
   border-radius: 10px;
   overflow: hidden;
 }
 
 .table-editorial thead {
-  background: var(--ink-3);
+  background: var(--ink-4);
 }
 
 .table-editorial th {
@@ -460,17 +460,45 @@ body > * {
   color: var(--fg-muted);
   padding: 10px 14px;
   border-bottom: 1px solid var(--b-base);
+  border-right: 1px solid var(--b-base);
   white-space: nowrap;
   overflow: hidden;
+}
+.table-editorial th:last-child {
+  border-right: none;
+}
+
+.table-editorial th.text-center,
+.table-editorial td.text-center {
+  text-align: center;
+}
+.table-editorial th.text-center > span,
+.table-editorial td.text-center > * {
+  margin-inline: auto;
+}
+.table-editorial th.text-right,
+.table-editorial td.text-right {
+  text-align: right;
 }
 
 .table-editorial td {
   padding: 8px 14px;
   border-bottom: 1px solid var(--b-soft);
+  border-right: 1px solid var(--b-soft);
   color: var(--fg);
   white-space: nowrap;
   overflow: hidden;
   vertical-align: middle;
+}
+.table-editorial td:last-child {
+  border-right: none;
+}
+
+/* Reserva espaço na borda direita do td quando há AbrirChip floatRight,
+ * evitando que texto longo do conteúdo principal se sobreponha ao chip.
+ * Aplicado via classe .cell-abrir na td. */
+.table-editorial td.cell-abrir {
+  padding-right: 60px;
 }
 
 .table-editorial tbody tr {

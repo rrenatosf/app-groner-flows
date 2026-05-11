@@ -9,11 +9,11 @@ import {
   deleteVendedor,
   updateVendedorFields,
   type UpdateVendedorPartial,
-} from "../../../../../usuarios/actions";
+} from "../../../../../../usuarios/actions";
 import {
   pendenciasFor,
   vendedorShapeIssues,
-} from "../../../../../usuarios/saude-usuario";
+} from "../../../../../../usuarios/saude-usuario";
 
 /**
  * Form da aba "Dados" do vendedor — extraído de usuario-edit-modal.tsx.
@@ -141,7 +141,7 @@ export function VendedorDadosForm({
         setErr(res.error);
         return;
       }
-      router.push(`/clientes/${clienteId}/vendedores`);
+      router.push(`/clientes/${clienteId}/agentes/vendedores`);
       router.refresh();
     });
   }

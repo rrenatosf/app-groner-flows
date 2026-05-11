@@ -36,7 +36,7 @@ const FIELDS: Field[] = [
   { key: "crmTenant", label: "CRM Tenant" },
   { key: "crmOrigemId", label: "CRM Origem" },
   { key: "apiInstanciaNome", label: "Instância (WhatsApp)" },
-  { key: "apiBaseUrl", label: "Base URL", secret: true },
+  { key: "apiBaseUrl", label: "Base URL API", secret: true },
   {
     key: "apiToken",
     label: "API Token",
@@ -312,7 +312,7 @@ export function ClienteDadosForm({
                 <SecretInput
                   value={value}
                   onChange={(v) => set(f.key as string, v)}
-                  disabled={pending}
+                  disabled={pending || !isSuper}
                   highlight={isPendente}
                   forcePassword={f.key === "senha"}
                   placeholder={
@@ -326,7 +326,7 @@ export function ClienteDadosForm({
                   type={f.type ?? "text"}
                   value={value}
                   onChange={(e) => set(f.key as string, e.target.value)}
-                  disabled={pending}
+                  disabled={pending || !isSuper}
                   className="text-[13px] px-2.5 py-1.5 rounded-md"
                   style={{
                     backgroundColor: "var(--ink-3)",
@@ -372,6 +372,7 @@ export function ClienteDadosForm({
         )}
       </div>
 
+      {isSuper && (
       <div
         className="rounded-md p-3 space-y-2"
         style={{
@@ -490,6 +491,7 @@ export function ClienteDadosForm({
           </div>
         )}
       </div>
+      )}
 
       <div
         className="flex items-center justify-between gap-2 pt-1"
@@ -500,13 +502,15 @@ export function ClienteDadosForm({
             ? "Cadastro completo."
             : `${pendencias.length} pendência${pendencias.length === 1 ? "" : "s"}`}
         </span>
-        <button
-          type="submit"
-          disabled={pending}
-          className="chip chip-mint text-[12px] px-3 py-1.5"
-        >
-          {pending ? "Salvando…" : "Salvar"}
-        </button>
+        {isSuper && (
+          <button
+            type="submit"
+            disabled={pending}
+            className="chip chip-mint text-[12px] px-3 py-1.5"
+          >
+            {pending ? "Salvando…" : "Salvar"}
+          </button>
+        )}
       </div>
 
       <PasswordConfirm

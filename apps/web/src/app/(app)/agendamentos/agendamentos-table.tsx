@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SearchBox } from "@/components/search-box";
 import {
+  AbrirChip,
   ColumnPicker,
   HealthToggle,
   IconInfo,
@@ -439,7 +440,7 @@ export function AgendamentosTable({
 
           const tdClass =
             (d.align === "center" ? "text-center" : "") +
-            (d.key === "leadNome" ? " font-medium" : "");
+            (d.key === "leadNome" ? " font-medium cell-abrir" : "");
 
           return (
             <td
@@ -525,6 +526,14 @@ export function AgendamentosTable({
                     >
                       <IconInfo size={12} />
                     </span>
+                  )}
+                  {d.key === "leadNome" && (
+                    <AbrirChip
+                      onClick={() => setEditTarget(r)}
+                      ariaLabel={`Abrir agendamento de ${r.leadNome ?? `#${r.id}`}`}
+                      title="Abrir detalhes do agendamento"
+                      floatRight
+                    />
                   )}
                   {editable && (
                     <button

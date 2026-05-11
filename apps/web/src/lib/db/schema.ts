@@ -170,10 +170,14 @@ export type CrmStatusSlot = {
   id: string;
   slug: string;
   tipo: CrmStatusTipo;
+  /** ID da etapa pai no CRM (funil). Preenchido pelo "Buscar do CRM". */
+  etapa_id: string;
+  /** Nome da etapa pai. */
+  etapa_nome: string;
   /** Marcado como "não utilizado" pelo cliente. Slot preserva no banco
    *  mas deixa de contar como pendente nos contadores de configuração.
    *  Aplicável apenas a slots `desqualificacao` (a UI só expõe lá). */
-  notUsed?: boolean;
+  not_used: boolean;
 };
 
 export type DiaSemana = "seg" | "ter" | "qua" | "qui" | "sex" | "sab" | "dom";
@@ -362,6 +366,9 @@ export const leads = pgTable("leads", {
   statusFollowup: text("status_followup"),
   proximoFollowup: timestamp("proximo_followup", { withTimezone: true }),
   sessionId: text("session_id"),
+  /** Vínculo com instância de automação (cliente_automacoes.id). Define
+   *  qual automação está atendendo esse lead. NULL = sem automação. */
+  clienteAutomacaoId: bigint("cliente_automacao_id", { mode: "number" }),
 });
 
 export const automacoes = pgTable(
@@ -386,6 +393,17 @@ export const automacoes = pgTable(
       .$type<Array<Record<string, Record<string, unknown>>>>()
       .notNull()
       .default([]),
+    /** Comentários descritivos do template (apenas visuais — NÃO vão pro JSON
+     *  consumido por workflows N8N). Shape: `{ "grupo.item.subitem": "..." }`.
+     *  Lookup direto por path. Tela de instância lê em runtime via JOIN. */
+    dadosComentarios: jsonb("dados_comentarios")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    /** Prompt da automação quando ela é um agente de IA. NULL/empty quando
+     *  automação não é IA. Copiado pra `cliente_automacoes.prompt` no momento
+     *  do assign — cliente pode customizar por instância. */
+    prompt: text("prompt"),
   },
   (t) => ({
     nomeVersaoUnique: uniqueIndex("automacoes_nome_versao_unique").on(
@@ -418,6 +436,9 @@ export const clientesAutomacoes = pgTable(
       .$type<Array<Record<string, Record<string, unknown>>>>()
       .notNull()
       .default([]),
+    /** Prompt da instância (cópia do template, editável por loja/cliente).
+     *  Null = automação não-IA ou prompt ainda não preenchido. */
+    prompt: text("prompt"),
     isActive: boolean("is_active").notNull().default(true),
   },
   (t) => ({

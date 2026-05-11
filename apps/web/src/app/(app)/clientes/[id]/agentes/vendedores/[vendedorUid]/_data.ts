@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { loadVendedorOrNotFound } from "../../_data";
+import { loadVendedorOrNotFound } from "../../../_data";
 
 /** Carrega o vendedor específico do drilldown. Wrapper cacheado por
  *  request via react.cache. */

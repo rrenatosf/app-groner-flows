@@ -162,7 +162,7 @@ export function buildCatalogoValidation(
   const shapeOk = validateDadosConfiguracoes(cfg).ok;
   if (!shapeOk) return out;
 
-  // Grupo 1: dados_de_configuração
+  // Grupo 1: dados_de_configuracao
   {
     const g = findGroup(cfg, GROUP_DADOS_CONFIG);
     let status: "ok" | "warn" = "ok";
@@ -197,7 +197,7 @@ export function buildCatalogoValidation(
     }
     out.push({
       key: GROUP_DADOS_CONFIG,
-      label: "Grupo: dados_de_configuração",
+      label: "Grupo: dados_de_configuracao",
       expected: `objeto com ${DADOS_CONFIG_FIELDS.join(", ")}`,
       actual,
       status,

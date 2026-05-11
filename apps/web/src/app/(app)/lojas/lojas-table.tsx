@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import type { Loja } from "@/lib/db/schema";
 import { SearchBox } from "@/components/search-box";
 import {
+  AbrirChip,
   AcessarButton,
   ColumnPicker,
   CopyButton,
@@ -602,7 +603,7 @@ export function LojasTable({
             canEdit && !d.readOnly && (!d.superOnly || isSuper);
           const tdClass =
             (d.align === "center" ? "text-center" : "") +
-            (d.key === "nome" ? " font-medium" : "");
+            (d.key === "nome" ? " font-medium cell-abrir" : "");
 
           return (
             <td
@@ -727,6 +728,14 @@ export function LojasTable({
                     >
                       <IconInfo size={12} />
                     </span>
+                  )}
+                  {d.key === "nome" && (
+                    <AbrirChip
+                      onClick={() => setEditTarget(r)}
+                      ariaLabel={`Abrir configurações da loja ${r.loja.nome ?? `#${r.loja.id.slice(0, 8)}`}`}
+                      title="Abrir configurações da loja"
+                      floatRight
+                    />
                   )}
                   {editable && (
                     <button
@@ -883,7 +892,7 @@ export function LojasTable({
             onHideAll={() => persistHidden(new Set(visibleKeys.filter((k) => k !== "acoes")))}
           />
           <HealthToggle value={showHealth} onChange={setShowHealth} />
-          {canEdit && (
+          {canEdit && isSuper && (
             <button
               type="button"
               onClick={() => setNovoOpen(true)}

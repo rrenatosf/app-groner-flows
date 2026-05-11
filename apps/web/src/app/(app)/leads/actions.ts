@@ -3,7 +3,12 @@
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
-import { clientes, leads, type Vendedor } from "@/lib/db/schema";
+import {
+  clientes,
+  clientesAutomacoes,
+  leads,
+  type Vendedor,
+} from "@/lib/db/schema";
 import { readSession } from "@/lib/auth/session";
 import {
   isClienteAdminReadOnly,
@@ -242,6 +247,20 @@ export type VendedorOption = {
   is_active: boolean;
 };
 
+/** Option pra dropdown de cliente_automacao (vinculo lead↔automação). */
+export type AutomacaoOption = {
+  /** ID da instância (cliente_automacoes.id). */
+  id: number;
+  /** ID da loja (lead pertence indiretamente via cliente; UI pode usar
+   *  pra agrupar/filtrar por loja). */
+  lojaId: string;
+  /** Nome do catálogo da automação. */
+  nome: string;
+  /** Versão do catálogo, se houver. */
+  versao: string | null;
+  isActive: boolean;
+};
+
 /** Lista vendedores do tenant pra atribuição. Inclui inativos com flag,
  *  pra UI poder mostrar mas não permitir selecionar. */
 export async function listVendedoresParaLeadAction(
@@ -267,4 +286,39 @@ export async function listVendedoresParaLeadAction(
       role: v.role,
       is_active: v.is_active,
     }));
+}
+
+/** Atualiza vínculo lead → cliente_automacao. Null limpa. Valida que
+ *  a automação pertence ao mesmo cliente do lead pra evitar cross-tenant. */
+export async function updateLeadAutomacao(
+  leadId: number,
+  clienteAutomacaoId: number | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await readSession();
+  if (!session) return { ok: false, error: "Sessão expirada." };
+  const isSuper = await isSuperadminFresh(session);
+  const existing = await db.query.leads.findFirst({
+    where: eq(leads.id, leadId),
+  });
+  if (!existing) return { ok: false, error: "Lead não encontrado." };
+  if (!isSuper && existing.clienteId !== session.clienteId) {
+    return { ok: false, error: "Sem permissão." };
+  }
+  if (clienteAutomacaoId !== null) {
+    const ca = await db.query.clientesAutomacoes.findFirst({
+      where: eq(clientesAutomacoes.id, clienteAutomacaoId),
+    });
+    if (!ca) return { ok: false, error: "Automação não encontrada." };
+    if (ca.clienteId !== existing.clienteId) {
+      return {
+        ok: false,
+        error: "Automação não pertence ao cliente do lead.",
+      };
+    }
+  }
+  await db
+    .update(leads)
+    .set({ clienteAutomacaoId })
+    .where(eq(leads.id, leadId));
+  return { ok: true };
 }

@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import { SearchBox } from "@/components/search-box";
 import {
+  AbrirChip,
   BooleanToggle,
   ColumnPicker,
   HealthToggle,
@@ -24,11 +25,15 @@ import {
   type PageSize,
 } from "@/components/data-table";
 import {
+  deleteCatalogoAutomacao,
   updateCatalogoAutomacaoCell,
   type EditableCatalogoKey,
 } from "./actions";
+import { verifySuperPasswordAction } from "../clientes/actions";
+import { PasswordConfirm } from "@/components/password-confirm";
 import { AutomacaoEditModal } from "./automacao-edit-modal";
 import { AutomacaoNovoModal } from "./automacao-novo-modal";
+import { buildN8nWorkflowUrl } from "./n8n-url";
 import {
   buildCatalogoValidation,
   pendenciasCatalogoFor,
@@ -45,6 +50,7 @@ type ColKey =
   | "descricao"
   | "baseUrl"
   | "n8nWorkflowId"
+  | "n8nLink"
   | "isActive"
   | "template"
   | "saude"
@@ -64,6 +70,7 @@ const COLUMNS: ColDef[] = [
   { key: "descricao", label: "Descrição", editKind: "text" },
   { key: "baseUrl", label: "Base URL", editKind: "text" },
   { key: "n8nWorkflowId", label: "ID workflow n8n", editKind: "text" },
+  { key: "n8nLink", label: "Workflow", align: "center", readOnly: true },
   { key: "isActive", label: "Ativo", align: "center", editKind: "boolean" },
   { key: "template", label: "Template", align: "center", readOnly: true },
   { key: "saude", label: "Saúde", align: "center", readOnly: true },
@@ -75,15 +82,16 @@ const COLUMNS: ColDef[] = [
   },
 ];
 
-const STORAGE_HIDDEN = "groner.automacoes_catalogo.col_hidden_v1";
+const STORAGE_HIDDEN = "groner.automacoes_catalogo.col_hidden_v2";
 const STORAGE_PAGE_SIZE = "groner.automacoes_catalogo.page_size_v1";
 
-/** Default visible. */
+/** Default visible. n8nWorkflowId fica oculto por padrão; n8nLink (pill
+ *  visual) ocupa o lugar dele na visualização default. */
 const DEFAULT_VISIBLE: ReadonlySet<ColKey> = new Set<ColKey>([
   "nome",
   "versao",
   "descricao",
-  "n8nWorkflowId",
+  "n8nLink",
   "isActive",
   "template",
   "saude",
@@ -103,6 +111,7 @@ function valueFor(r: CatalogoRow, key: ColKey): unknown {
       ? r.dadosConfiguracoesTemplate.length
       : 0;
   }
+  if (key === "n8nLink") return r.n8nWorkflowId ?? "";
   return (r as unknown as Record<string, unknown>)[key];
 }
 
@@ -114,6 +123,9 @@ function isCellMissing(r: CatalogoRow, key: ColKey): boolean {
     key === "template"
   )
     return false;
+  if (key === "n8nLink") {
+    return !r.baseUrl || !r.n8nWorkflowId;
+  }
   const v = (r as unknown as Record<string, unknown>)[key];
   if (v === null || v === undefined) return true;
   if (typeof v === "string" && v.trim() === "") return true;
@@ -313,6 +325,36 @@ export function AutomacoesTable({
   const [editTarget, setEditTarget] = useState<CatalogoRow | null>(null);
   const [validacaoTarget, setValidacaoTarget] =
     useState<CatalogoRow | null>(null);
+  // Delete flow: clique no ✕ abre PasswordConfirm. Senha validada via
+  // verifySuperPasswordAction, depois dispara deleteCatalogoAutomacao.
+  const [deleteTarget, setDeleteTarget] = useState<CatalogoRow | null>(
+    null,
+  );
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
+
+  function handleDeleteConfirm(password: string) {
+    if (!deleteTarget) return;
+    setDeleteErr(null);
+    setDeletePending(true);
+    const target = deleteTarget;
+    startTransition(async () => {
+      const pwd = await verifySuperPasswordAction(password);
+      if (!pwd.ok) {
+        setDeleteErr(pwd.error);
+        setDeletePending(false);
+        return;
+      }
+      const res = await deleteCatalogoAutomacao(target.id);
+      setDeletePending(false);
+      if (!res.ok) {
+        setDeleteErr(res.error);
+        return;
+      }
+      setDeleteTarget(null);
+      router.refresh();
+    });
+  }
 
   const orderedDefs = useMemo(
     () => visibleDefs.filter((d) => !hidden.has(d.key)),
@@ -391,7 +433,7 @@ export function AutomacoesTable({
             d.editKind === "boolean" && editable && !isEditing;
           const tdClass =
             (d.align === "center" ? "text-center" : "") +
-            (d.key === "nome" ? " font-medium" : "");
+            (d.key === "nome" ? " font-medium cell-abrir" : "");
           return (
             <td
               key={d.key}
@@ -420,6 +462,49 @@ export function AutomacoesTable({
                   automacao={r}
                   onOpen={() => setValidacaoTarget(r)}
                 />
+              ) : d.key === "n8nLink" ? (
+                r.baseUrl && r.n8nWorkflowId ? (
+                  <a
+                    href={buildN8nWorkflowUrl(r.baseUrl, r.n8nWorkflowId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    title={`Abrir workflow ${r.n8nWorkflowId} no n8n`}
+                    aria-label="Abrir workflow no n8n"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md transition-colors"
+                    style={{
+                      backgroundColor: "rgba(234, 75, 113, 0.14)",
+                      color: "#f06481",
+                      border: "1px solid rgba(234, 75, 113, 0.35)",
+                      letterSpacing: "0.02em",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor =
+                        "rgba(234, 75, 113, 0.24)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor =
+                        "rgba(234, 75, 113, 0.14)";
+                    }}
+                  >
+                    n8n
+                    <span aria-hidden="true" className="text-[10px]">
+                      ↗
+                    </span>
+                  </a>
+                ) : (
+                  <span
+                    className="text-[11px]"
+                    style={{ color: "var(--fg-subtle)" }}
+                    title={
+                      !r.baseUrl
+                        ? "Base URL não configurada"
+                        : "ID do workflow não configurado"
+                    }
+                  >
+                    —
+                  </span>
+                )
               ) : d.key === "template" ? (
                 <button
                   type="button"
@@ -487,18 +572,13 @@ export function AutomacoesTable({
                       <IconInfo size={12} />
                     </span>
                   )}
-                  {d.key === "n8nWorkflowId" && r.baseUrl && r.n8nWorkflowId && (
-                    <a
-                      href={`${r.baseUrl.replace(/\/$/, "")}/workflow/${r.n8nWorkflowId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      title="Abrir workflow no n8n"
-                      aria-label="Abrir workflow no n8n"
-                      className="text-[11px] text-[color:var(--mint-300)] hover:text-[color:var(--mint-200)]"
-                    >
-                      ↗
-                    </a>
+                  {d.key === "nome" && (
+                    <AbrirChip
+                      onClick={() => setEditTarget(r)}
+                      ariaLabel={`Abrir configurações de ${r.nome ?? `automação #${r.id}`}`}
+                      title="Abrir configurações da automação"
+                      floatRight
+                    />
                   )}
                   {editable && (
                     <button
@@ -519,6 +599,29 @@ export function AutomacoesTable({
             </td>
           );
         })}
+        {canEdit && (
+          <td className="text-center">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDeleteErr(null);
+                setDeleteTarget(r);
+              }}
+              disabled={pending || deletePending}
+              aria-label={`Excluir automação ${r.nome ?? "(sem nome)"}`}
+              title="Excluir do catálogo (requer senha do superadmin)"
+              className="text-[11px] px-2 py-0.5 rounded-md hover:brightness-110 disabled:opacity-50"
+              style={{
+                backgroundColor: "var(--rose-bg)",
+                color: "var(--rose-300)",
+                border: "1px solid var(--rose-border)",
+              }}
+            >
+              Excluir
+            </button>
+          </td>
+        )}
       </tr>
     );
   }
@@ -605,13 +708,14 @@ export function AutomacoesTable({
                   </th>
                 );
               })}
+              {canEdit && <th className="text-center">Excluir</th>}
             </tr>
           </thead>
           <tbody>
             {pagedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={orderedDefs.length}
+                  colSpan={orderedDefs.length + (canEdit ? 1 : 0)}
                   className="text-center text-[color:var(--fg-subtle)] py-6"
                 >
                   Nenhuma automação no catálogo.
@@ -661,6 +765,22 @@ export function AutomacoesTable({
         target={editTarget}
         canEdit={canEdit}
         onClose={() => setEditTarget(null)}
+      />
+      <PasswordConfirm
+        open={deleteTarget !== null}
+        title="Excluir automação"
+        message={
+          deleteTarget
+            ? `Apagar "${deleteTarget.nome ?? "(sem nome)"}" do catálogo? Bloqueado se houver clientes usando. Informe a senha do superadmin pra confirmar.`
+            : ""
+        }
+        pending={deletePending}
+        errorMessage={deleteErr}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteErr(null);
+        }}
       />
       <JsonValidationModal
         open={validacaoTarget !== null}

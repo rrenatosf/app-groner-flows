@@ -1420,7 +1420,9 @@ export async function updateClienteSecaoAction(
     id: string;
     slug: string;
     tipo: Tipo;
-    notUsed?: boolean;
+    etapa_id: string;
+    etapa_nome: string;
+    not_used: boolean;
   };
   let crmStatusColunas: SlotShape[] | null | undefined = undefined;
   if (hasSlotData) {
@@ -1428,17 +1430,24 @@ export async function updateClienteSecaoAction(
     for (const s of SLOTS) {
       const slotId = String(formData.get(`id_${s.slug}`) ?? "").trim();
       const slotNome = String(formData.get(`nome_${s.slug}`) ?? "").trim();
+      const slotEtapaId = String(
+        formData.get(`etapa_id_${s.slug}`) ?? "",
+      ).trim();
+      const slotEtapaNome = String(
+        formData.get(`etapa_nome_${s.slug}`) ?? "",
+      ).trim();
       const slotNotUsed =
         String(formData.get(`notused_${s.slug}`) ?? "") === "1";
       if (!slotId && !slotNome && !slotNotUsed) continue;
-      const slot: SlotShape = {
+      colunas.push({
         nome: slotNome,
         id: slotId,
         slug: s.slug,
         tipo: s.tipo,
-      };
-      if (slotNotUsed) slot.notUsed = true;
-      colunas.push(slot);
+        etapa_id: slotEtapaId,
+        etapa_nome: slotEtapaNome,
+        not_used: slotNotUsed,
+      });
     }
     crmStatusColunas = colunas.length > 0 ? colunas : null;
   }

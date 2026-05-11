@@ -5,15 +5,19 @@ import {
   type FieldKind,
   humanizeKey,
   isAutofillField,
+  isCrmStatusObject,
   isSecretField,
   isTelefoneField,
 } from "../dados-config-form";
 import { MAX_STRING_LEN } from "../dados-config-shape";
 import { ArrayInput } from "./ArrayInput";
+import { CrmStatusPickerButton } from "./CrmStatusPickerButton";
+import { GroupFields } from "./GroupFields";
 import { TelefoneBRInput } from "./TelefoneBRInput";
 
 /** Renderiza UM campo conforme o kind inferido. Boolean usa BooleanToggle
- *  do design system. Unsupported mostra warning amarelo. */
+ *  do design system. Object renderiza recursivamente via GroupFields
+ *  (sub-grupos, sub-pickers de coluna, qualquer profundidade). */
 export function FieldInput({
   fieldKey,
   kind,
@@ -27,6 +31,54 @@ export function FieldInput({
   onChange: (next: unknown) => void;
   disabled?: boolean;
 }) {
+  // Objeto aninhado: card com header (título + divisor) e GroupFields
+  // recursivo abaixo. Se shape bater com CRM status (`crm_status_id` +
+  // `crm_etapa_id`), header ganha botão "Buscar do CRM" à direita.
+  if (kind.kind === "object") {
+    const inner =
+      value !== null && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const hasCrmStatus = isCrmStatusObject(inner);
+    return (
+      <div
+        className="rounded-md"
+        style={{
+          backgroundColor: "var(--ink-2)",
+          border: "1px solid var(--b-soft)",
+        }}
+      >
+        <div
+          className="flex items-center justify-between gap-2 px-3 py-2"
+          style={{ borderBottom: "1px solid var(--b-soft)" }}
+        >
+          <span
+            className="text-[12.5px] font-medium truncate"
+            style={{ color: "var(--fg)" }}
+            title={fieldKey}
+          >
+            {fieldKey}
+          </span>
+          {hasCrmStatus && (
+            <CrmStatusPickerButton
+              inner={inner}
+              onChange={(next) => onChange(next)}
+              disabled={disabled}
+            />
+          )}
+        </div>
+        <div className="px-3 py-2.5">
+          <GroupFields
+            groupName={fieldKey}
+            groupValue={inner}
+            onChange={(next) => onChange(next)}
+            disabled={disabled}
+          />
+        </div>
+      </div>
+    );
+  }
+
   const label = humanizeKey(fieldKey);
   const auto = isAutofillField(fieldKey);
   const secret = isSecretField(fieldKey);
@@ -74,8 +126,6 @@ function renderInput(
   if (kind.kind === "string") {
     const s = typeof value === "string" ? value : "";
     if (isTelefone) {
-      // Telefone array-string usa TelefoneBRInput; aqui é só fallback
-      // pra string solta. Auto/secret não se aplicam a telefone.
       return (
         <TelefoneBRInput
           value={s}
@@ -84,8 +134,6 @@ function renderInput(
         />
       );
     }
-    // Auto-fill é readonly (vem do contexto, não muda à mão).
-    // Secret aparece mascarado mas o valor real está no state.
     const inputType = secret ? "password" : "text";
     const inputReadonly = !!(auto || secret);
     return (
@@ -169,17 +217,20 @@ function renderInput(
       />
     );
   }
-  // unsupported
-  return (
-    <div
-      className="text-[11.5px] px-2.5 py-1.5 rounded-md"
-      style={{
-        backgroundColor: "var(--amber-bg)",
-        color: "var(--amber-300)",
-        border: "1px solid var(--amber-border)",
-      }}
-    >
-      Tipo não suportado pelo form visual: {kind.reason} Use o editor JSON cru.
-    </div>
-  );
+  if (kind.kind === "unsupported") {
+    return (
+      <div
+        className="text-[11.5px] px-2.5 py-1.5 rounded-md"
+        style={{
+          backgroundColor: "var(--amber-bg)",
+          color: "var(--amber-300)",
+          border: "1px solid var(--amber-border)",
+        }}
+      >
+        Tipo não suportado pelo form visual: {kind.reason} Use o editor JSON cru.
+      </div>
+    );
+  }
+  // object case já tratado acima — não chega aqui.
+  return null;
 }

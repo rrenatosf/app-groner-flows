@@ -1,7 +1,5 @@
 "use client";
 
-import type { CrmStatus } from "@/server/actions/cliente-crm";
-import type { CrmStatusSlot } from "@/lib/db/schema";
 import { COLUNA_SLOT_FIELDS } from "../dados-config-shape";
 import {
   type FieldKind,
@@ -21,33 +19,25 @@ const PICKER_CONTROLLED = new Set<string>([
   "etapa_nome",
 ]);
 
-/** Renderiza os campos internos de UM grupo. Pra grupos `coluna_*`
- *  delega ao ColunaPickerLive (6 campos casados — 4 canonical + 2 etapa).
- *  Pra grupos comuns, uma row por campo, ordenada por kind. */
+/** Renderiza os campos internos de UM grupo (ou sub-grupo aninhado).
+ *  - Se `groupName` é `coluna_*`: ColunaPickerLive controla 6 campos
+ *    canonical (id, nome, slug, tipo + etapa_id, etapa_nome). Campos
+ *    extras do template (ex: kanban_pos) renderizam livre abaixo.
+ *  - Senão: row por campo, ordenada por kind. Sub-objetos recursivos
+ *    são tratados via FieldInput → GroupFields recursivo (qualquer
+ *    profundidade). */
 export function GroupFields({
   groupName,
   groupValue,
   onChange,
-  crmColunas,
-  liveList,
-  pendingLive,
-  liveErr,
-  refreshLive,
   disabled,
 }: {
   groupName: string;
   groupValue: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
-  crmColunas: CrmStatusSlot[] | null;
-  liveList: CrmStatus[] | null;
-  pendingLive: boolean;
-  liveErr: string | null;
-  refreshLive: () => void;
   disabled?: boolean;
 }) {
   if (isColunaGroup(groupName)) {
-    // Picker controla campos canonical + etapa_id/etapa_nome. Campos
-    // extras do template (ex: kanban_pos) são editáveis livre abaixo.
     const extraEntries = Object.entries(groupValue).filter(
       ([k]) => !PICKER_CONTROLLED.has(k),
     );
@@ -65,11 +55,6 @@ export function GroupFields({
           groupName={groupName}
           groupValue={groupValue}
           onChange={onChange}
-          liveList={liveList}
-          cachedColunas={crmColunas}
-          pending={pendingLive}
-          fetchError={liveErr}
-          onRefresh={refreshLive}
           disabled={disabled}
         />
         {extraSorted.length > 0 && (
@@ -83,6 +68,7 @@ export function GroupFields({
                 className={
                   e.kind.kind === "array-string" ||
                   e.kind.kind === "array-number" ||
+                  e.kind.kind === "object" ||
                   e.kind.kind === "unsupported"
                     ? "sm:col-span-2"
                     : undefined
@@ -122,6 +108,7 @@ export function GroupFields({
           className={
             e.kind.kind === "array-string" ||
             e.kind.kind === "array-number" ||
+            e.kind.kind === "object" ||
             e.kind.kind === "unsupported"
               ? "sm:col-span-2"
               : undefined

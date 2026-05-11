@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
+  automacoes,
   clientes,
+  clientesAutomacoes,
   isPlaceholderVendedor,
   leads,
   type Vendedor,
@@ -13,7 +15,7 @@ import {
 } from "@/lib/auth/guard";
 import { LeadsTable } from "./leads-table";
 import { resolveVendedorNome, type LeadRow } from "./saude-lead";
-import type { VendedorOption } from "./actions";
+import type { AutomacaoOption, VendedorOption } from "./actions";
 
 export default async function LeadsPage({
   searchParams,
@@ -130,17 +132,62 @@ export default async function LeadsPage({
       }));
   }
 
+  // Carrega automações vinculadas aos clientes dos leads (pro dropdown
+  // de seleção). JOIN cliente_automacoes + automacoes pra pegar nome do
+  // catálogo. Agrupado por clienteId.
+  const automacaoRows =
+    clienteIds.length > 0
+      ? await db
+          .select({
+            id: clientesAutomacoes.id,
+            clienteId: clientesAutomacoes.clienteId,
+            lojaId: clientesAutomacoes.lojaId,
+            isActive: clientesAutomacoes.isActive,
+            catalogoNome: automacoes.nome,
+            catalogoVersao: automacoes.versao,
+          })
+          .from(clientesAutomacoes)
+          .innerJoin(
+            automacoes,
+            eq(clientesAutomacoes.automacaoId, automacoes.id),
+          )
+          .where(inArray(clientesAutomacoes.clienteId, clienteIds))
+          .orderBy(asc(automacoes.nome))
+      : [];
+
+  const automacoesPorCliente: Record<number, AutomacaoOption[]> = {};
+  const automacaoById = new Map<number, AutomacaoOption>();
+  for (const a of automacaoRows) {
+    const opt: AutomacaoOption = {
+      id: a.id,
+      lojaId: a.lojaId,
+      nome: a.catalogoNome ?? "(sem nome)",
+      versao: a.catalogoVersao,
+      isActive: a.isActive,
+    };
+    automacaoById.set(a.id, opt);
+    if (!automacoesPorCliente[a.clienteId]) {
+      automacoesPorCliente[a.clienteId] = [];
+    }
+    automacoesPorCliente[a.clienteId].push(opt);
+  }
+
   const allRows: LeadRow[] = rowsRaw.map((l) => {
     const c = l.clienteId !== null ? clienteMap.get(l.clienteId) : null;
     const venMap =
       l.clienteId !== null
         ? vendedoresPorClienteMap.get(l.clienteId) ?? new Map()
         : new Map<number, Vendedor>();
+    const auto =
+      l.clienteAutomacaoId !== null
+        ? automacaoById.get(l.clienteAutomacaoId) ?? null
+        : null;
     return {
       ...l,
       clienteNome: c?.nome ?? null,
       clienteTenant: c?.tenant ?? null,
       vendedorNome: resolveVendedorNome(l, venMap),
+      clienteAutomacaoNome: auto?.nome ?? null,
     };
   });
 
@@ -178,6 +225,7 @@ export default async function LeadsPage({
           canEdit={canEdit}
           isVendedor={session.kind === "usuario"}
           vendedoresPorCliente={vendedoresPorCliente}
+          automacoesPorCliente={automacoesPorCliente}
           readOnlyReason={readOnlyReason}
         />
       </section>

@@ -21,6 +21,7 @@ import {
   type DadosConfigGroup,
 } from "../../../automacoes/dados-config-shape";
 import { autofillContextFields } from "../../../automacoes/dados-config-form";
+import { buildN8nWorkflowUrl } from "../../../automacoes/n8n-url";
 import { ConfiguracoesForm } from "../../../automacoes/_form/ConfiguracoesForm";
 import {
   buildInstanciaValidation,
@@ -238,7 +239,7 @@ export function InstanciaEditModal({
 
   const n8nLink =
     target.catalogoBaseUrl && target.catalogoWorkflowId
-      ? `${target.catalogoBaseUrl.replace(/\/$/, "")}/workflow/${target.catalogoWorkflowId}`
+      ? buildN8nWorkflowUrl(target.catalogoBaseUrl, target.catalogoWorkflowId)
       : null;
 
   return (
@@ -379,20 +380,24 @@ export function InstanciaEditModal({
                 value={target.catalogoVersao ?? "—"}
               />
               <InfoBlock
-                label="ID instância"
+                label="Groner CRM ID"
                 value={String(target.id)}
               />
-              <InfoBlock
-                label="Base URL (catálogo)"
-                value={target.catalogoBaseUrl ?? "—"}
-              />
-              <InfoBlock
-                label="Workflow n8n (catálogo)"
-                value={target.catalogoWorkflowId ?? "—"}
-              />
+              {isSuper && (
+                <>
+                  <InfoBlock
+                    label="Base URL (catálogo)"
+                    value={target.catalogoBaseUrl ?? "—"}
+                  />
+                  <InfoBlock
+                    label="Workflow n8n (catálogo)"
+                    value={target.catalogoWorkflowId ?? "—"}
+                  />
+                </>
+              )}
             </div>
 
-            {n8nLink && (
+            {isSuper && n8nLink && (
               <div className="sm:col-span-2">
                 <a
                   href={n8nLink}

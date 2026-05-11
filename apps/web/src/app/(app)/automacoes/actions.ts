@@ -13,6 +13,7 @@ import { readSession } from "@/lib/auth/session";
 import { isSuperadminFresh } from "@/lib/auth/guard";
 import {
   validateDadosConfiguracoes as validateDadosConfiguracoesPure,
+  validateSnakeCaseKeys,
   type DadosConfigGroup,
 } from "./dados-config-shape";
 
@@ -52,6 +53,7 @@ export type CreateCatalogoAutomacaoInput = {
   versao?: string | null;
   isActive?: boolean;
   dadosConfiguracoesTemplate?: DadosConfigGroup[];
+  dadosComentarios?: Record<string, string>;
 };
 
 /** Instância: campos editáveis em `cliente_automacoes`. */
@@ -250,8 +252,12 @@ export async function createCatalogoAutomacao(
   if (input.dadosConfiguracoesTemplate !== undefined) {
     const v = validateDadosConfiguracoesPure(input.dadosConfiguracoesTemplate);
     if (!v.ok) return v;
+    const sk = validateSnakeCaseKeys(v.v);
+    if (!sk.ok) return sk;
     template = v.v;
   }
+
+  const comentarios = sanitizeComentarios(input.dadosComentarios);
 
   try {
     const [created] = await db
@@ -264,6 +270,7 @@ export async function createCatalogoAutomacao(
         versao: input.versao?.trim() || null,
         isActive: input.isActive ?? true,
         dadosConfiguracoesTemplate: template,
+        dadosComentarios: comentarios,
       })
       .returning({ id: automacoes.id });
     revalidateCatalogo();
@@ -331,6 +338,7 @@ export async function updateCatalogoAutomacaoCell(
 export async function updateTemplateConfiguracoes(
   automacaoId: number,
   template: unknown,
+  comentarios?: unknown,
 ): Promise<Ok | Err> {
   const auth = await requireSuper();
   if (!auth.ok) return auth;
@@ -342,13 +350,40 @@ export async function updateTemplateConfiguracoes(
 
   const valid = validateDadosConfiguracoesPure(template);
   if (!valid.ok) return valid;
+  const sk = validateSnakeCaseKeys(valid.v);
+  if (!sk.ok) return sk;
+
+  const writable: Record<string, unknown> = {
+    dadosConfiguracoesTemplate: valid.v,
+  };
+  if (comentarios !== undefined) {
+    writable.dadosComentarios = sanitizeComentarios(comentarios);
+  }
 
   await db
     .update(automacoes)
-    .set({ dadosConfiguracoesTemplate: valid.v })
+    .set(writable)
     .where(eq(automacoes.id, automacaoId));
   revalidateCatalogo();
   return { ok: true };
+}
+
+/** Coage entrada arbitrária em `Record<string, string>`. Aceita só chaves
+ *  string com valor string não-vazio. Vazio/null/undefined → ignorado.
+ *  Limita tamanho por valor pra evitar payload absurdo. */
+const MAX_COMENTARIO_LEN = 500;
+function sanitizeComentarios(raw: unknown): Record<string, string> {
+  if (raw === null || raw === undefined) return {};
+  if (typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof k !== "string" || k.trim() === "") continue;
+    if (typeof v !== "string") continue;
+    const trimmed = v.trim();
+    if (trimmed === "") continue;
+    out[k] = trimmed.slice(0, MAX_COMENTARIO_LEN);
+  }
+  return out;
 }
 
 export async function deleteCatalogoAutomacao(

@@ -3,14 +3,15 @@ import type { DadosConfigGroup } from "./dados-config-shape";
 
 /** Tipos suportados pelo form visual de configurações. Inferidos a partir
  *  do valor inicial — se o catálogo trazia `string`, o form mantém string;
- *  arrays vazios assumem string. Objeto aninhado e array misto caem no
- *  branch `unsupported` (mostra fallback no UI). */
+ *  arrays vazios assumem string. Objetos aninhados recursivos = `object`
+ *  (renderer recursivo). Array misto ainda cai em `unsupported`. */
 export type FieldKind =
   | { kind: "string" }
   | { kind: "number" }
   | { kind: "boolean" }
   | { kind: "array-string" }
   | { kind: "array-number" }
+  | { kind: "object" }
   | { kind: "unsupported"; reason: string };
 
 export function inferFieldKind(initial: unknown): FieldKind {
@@ -30,7 +31,7 @@ export function inferFieldKind(initial: unknown): FieldKind {
     };
   }
   if (typeof initial === "object") {
-    return { kind: "unsupported", reason: "Objeto aninhado não suportado." };
+    return { kind: "object" };
   }
   return {
     kind: "unsupported",
@@ -40,8 +41,7 @@ export function inferFieldKind(initial: unknown): FieldKind {
 
 /** Converte chave técnica (`loja_id`, `Email`) em rótulo amigável.
  *  Não normaliza acentos — o casing literal precisa ser preservado pra
- *  workflows N8N externos. */
-/** Converte snake_case ou kebab-case → "Cada Palavra Capitalizada".
+ *  workflows N8N externos.
  *  Ex: `loja_id` → "Loja Id"; `crm_token` → "Crm Token";
  *      `email_cliente` → "Email Cliente". */
 export function humanizeKey(key: string): string {
@@ -58,7 +58,8 @@ const KIND_ORDER: Record<FieldKind["kind"], number> = {
   boolean: 2,
   "array-string": 3,
   "array-number": 3,
-  unsupported: 4,
+  object: 4,
+  unsupported: 5,
 };
 
 /** Ordenação estável: string primeiro, depois number/boolean, depois
@@ -84,6 +85,15 @@ export function detectColunaTipo(groupName: string): CrmStatusTipo | null {
 
 export function isColunaGroup(groupName: string): boolean {
   return detectColunaTipo(groupName) !== null;
+}
+
+/** Detecta objeto que representa um status do CRM. Pattern: tem ambos
+ *  `crm_status_id` e `crm_etapa_id` no shape. Pickup distinto do
+ *  `coluna_*` (que usa o NOME do grupo); aqui usa o SHAPE dos campos.
+ *  Permite picker em objetos aninhados sem precisar batizar o grupo
+ *  com prefixo `coluna_`. */
+export function isCrmStatusObject(inner: Record<string, unknown>): boolean {
+  return "crm_status_id" in inner && "crm_etapa_id" in inner;
 }
 
 /** Heurística: detecta se grupo é o bloco de configurações do template
@@ -114,32 +124,76 @@ export function isTelefoneField(key: string): boolean {
 }
 
 /** Helpers E.164 BR: storage = "55" + DDD(2) + "9" + 8 dígitos = 13 chars.
- *  User input mostrado: DDD(2) + 8 = 10 dígitos. */
-export const TELEFONE_BR_USER_LEN = 10;
+ *  User input aceita 10 dígitos (DDD+8) OU 11 dígitos (DDD+9+8); o `9` extra
+ *  é injetado se o usuário não digitou. Display do input usa o que ele
+ *  digitou (10 ou 11), só a normalização pra storage adiciona o `9`. */
+export const TELEFONE_BR_USER_LEN_MIN = 10;
+export const TELEFONE_BR_USER_LEN_MAX = 11;
+/** @deprecated mantido pra compat — use TELEFONE_BR_USER_LEN_MAX. */
+export const TELEFONE_BR_USER_LEN = TELEFONE_BR_USER_LEN_MAX;
 export const TELEFONE_BR_STORED_LEN = 13;
 
 export function digitsOnly(s: string): string {
   return s.replace(/\D/g, "");
 }
 
-/** Extrai DDD+8 últimos dígitos do storage E.164 BR. Tolera storage curto
- *  (legado) — retorna últimos 10 dígitos. */
+/** Snake_case BR: minúsculas + dígitos + `_`. Começa por letra, sem `__`,
+ *  sem `_` final. Vazio é inválido. Workflows N8N esperam chaves nesse
+ *  formato — quebra de convenção pode quebrar o parse externo. */
+const SNAKE_CASE_RE = /^[a-z][a-z0-9_]*$/;
+
+export function isSnakeCase(s: string): boolean {
+  if (s === "") return false;
+  if (!SNAKE_CASE_RE.test(s)) return false;
+  if (s.endsWith("_")) return false;
+  if (s.includes("__")) return false;
+  return true;
+}
+
+/** Converte string arbitrária → snake_case. Strip acentos (NFD), lowercase,
+ *  troca não-alfanumérico por `_`, colapsa `_` repetidos, trim das pontas.
+ *  Idempotente: `toSnakeCase(toSnakeCase(x)) === toSnakeCase(x)`. */
+export function toSnakeCase(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/** Extrai dígitos do storage pra exibir ao user. Retorna sempre 11 dígitos
+ *  (DDD + 9 + 8) — formato canônico exibido. Tolera storage curto (legado). */
 export function fromTelefoneStored(stored: string): string {
   const d = digitsOnly(stored);
   if (d.length === TELEFONE_BR_STORED_LEN && d.startsWith("55")) {
-    return d.slice(2, 4) + d.slice(5, 13);
+    return d.slice(2);
   }
-  return d.slice(-TELEFONE_BR_USER_LEN);
+  return d.slice(-TELEFONE_BR_USER_LEN_MAX);
 }
 
-/** Monta storage E.164 BR a partir de DDD+8 dígitos. Vazio retorna "". */
+/** Monta storage E.164 BR a partir do que user digitou. Aceita 10 (DDD+8)
+ *  ou 11 (DDD+9+8) dígitos. Se 10 e 3º dígito ≠ `9` (fixo legado), injeta
+ *  `9` entre DDD e número. Se 10 e 3º dígito == `9`, está mid-typing
+ *  móvel — retorna raw, sem injetar (evita comer último dígito quando o
+ *  input controlado re-truncar). Se 11, prefixa `55`. Vazio retorna "". */
 export function toTelefoneStored(userInput: string): string {
   const d = digitsOnly(userInput);
   if (d.length === 0) return "";
-  if (d.length !== TELEFONE_BR_USER_LEN) return d;
-  const ddd = d.slice(0, 2);
-  const rest = d.slice(2);
-  return `55${ddd}9${rest}`;
+  if (d.length === TELEFONE_BR_USER_LEN_MIN) {
+    // Móvel mid-typing (DDD + 9 + 7 dígitos): aguarda 11º. Não injeta.
+    if (d.charAt(2) === "9") {
+      return d;
+    }
+    const ddd = d.slice(0, 2);
+    const rest = d.slice(2);
+    return `55${ddd}9${rest}`;
+  }
+  if (d.length === TELEFONE_BR_USER_LEN_MAX) {
+    return `55${d}`;
+  }
+  return d;
 }
 
 /** Mapeia nome de campo (case-insensitive) → função que extrai valor
@@ -158,7 +212,15 @@ type AutofillCtx = {
 };
 
 const AUTOFILL_KEYS: Record<string, (ctx: AutofillCtx) => string> = {
-  loja_id: (ctx) => ctx.lojaId ?? "",
+  // `loja_id` no contexto N8N = CRM ID da loja (não UUID interno).
+  // Workflow externo bate o lead pelo crm_id; UUID interno é detalhe
+  // do nosso jsonb. Doc Notion "ID da loja no modal de automações"
+  // (35c9084b98ef80b488b4f959bb0f7168).
+  loja_id: (ctx) => ctx.loja?.crm_id ?? "",
+  // `loja_id_interno` = UUID interno da loja (PK no DB Groner). Usado
+  // quando workflow precisa identificar a loja por id interno em vez
+  // de crm_id externo.
+  loja_id_interno: (ctx) => String(ctx.lojaId ?? ""),
   cliente_id: (ctx) => String(ctx.clienteId ?? ""),
   crm_loja_id: (ctx) => ctx.loja?.crm_id ?? "",
   crm_tenant: (ctx) => ctx.cliente?.crmTenant ?? "",
@@ -175,8 +237,41 @@ export function isSecretField(key: string): boolean {
   return key.toLowerCase() === "crm_token";
 }
 
-/** Aplica auto-fill em campos vazios. Não sobrescreve valor que o
- *  cliente já digitou. */
+/** Aplica auto-fill em campos vazios recursivamente (objetos aninhados
+ *  também). Não sobrescreve valor que o cliente já digitou. */
+function autofillRecursive(
+  inner: Record<string, unknown>,
+  ctx: AutofillCtx,
+): { value: Record<string, unknown>; changed: boolean } {
+  let changed = false;
+  const out: Record<string, unknown> = { ...inner };
+  for (const k of Object.keys(out)) {
+    const fn = AUTOFILL_KEYS[k.toLowerCase()];
+    if (fn) {
+      const current = out[k];
+      const isEmpty =
+        current === "" || current === null || current === undefined;
+      if (isEmpty) {
+        const next = fn(ctx);
+        if (next !== "") {
+          out[k] = next;
+          changed = true;
+          continue;
+        }
+      }
+    }
+    const v = out[k];
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+      const r = autofillRecursive(v as Record<string, unknown>, ctx);
+      if (r.changed) {
+        out[k] = r.value;
+        changed = true;
+      }
+    }
+  }
+  return { value: out, changed };
+}
+
 export function autofillContextFields(
   cfg: import("./dados-config-shape").DadosConfigGroup[],
   ctx: AutofillCtx,
@@ -184,23 +279,11 @@ export function autofillContextFields(
   return cfg.map((g) => {
     const name = Object.keys(g)[0];
     if (!name) return g;
-    const inner = { ...g[name] } as Record<string, unknown>;
-    let changed = false;
-    for (const k of Object.keys(inner)) {
-      const fn = AUTOFILL_KEYS[k.toLowerCase()];
-      if (!fn) continue;
-      const current = inner[k];
-      const isEmpty =
-        current === "" || current === null || current === undefined;
-      if (!isEmpty) continue;
-      const next = fn(ctx);
-      if (next === "") continue;
-      inner[k] = next;
-      changed = true;
-    }
-    return changed
+    const inner = g[name] as Record<string, unknown>;
+    const r = autofillRecursive(inner, ctx);
+    return r.changed
       ? ({
-          [name]: inner,
+          [name]: r.value,
         } as import("./dados-config-shape").DadosConfigGroup)
       : g;
   });
@@ -234,9 +317,35 @@ function isFieldEmpty(value: unknown, kind: FieldKind): boolean {
         value.length === 0 ||
         value.every((v) => v === "" || v === null || v === undefined)
       );
+    case "object":
+      // Considera objeto preenchido se TODOS os sub-campos não-vazios.
+      // Contagem detalhada é feita por `countPendentesInner` recursivo.
+      return false;
     case "unsupported":
       return false;
   }
+}
+
+/** Conta pendências dentro de um objeto interno (aplica recursão pra
+ *  sub-objetos + atalho pra coluna_* group). */
+function countPendentesInner(
+  innerName: string,
+  inner: Record<string, unknown>,
+): number {
+  if (isColunaGroup(innerName)) {
+    const id = inner.id;
+    return typeof id !== "string" || id.trim() === "" ? 1 : 0;
+  }
+  let n = 0;
+  for (const [k, v] of Object.entries(inner)) {
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+      n += countPendentesInner(k, v as Record<string, unknown>);
+      continue;
+    }
+    const kind = inferFieldKind(v);
+    if (isFieldEmpty(v, kind)) n++;
+  }
+  return n;
 }
 
 /** Conta campos pendentes (vazios) por grupo. Pra grupos `coluna_*`,
@@ -257,19 +366,38 @@ export function countPendentes(
     if (isTemplateConfigGroup(groupName)) {
       // Bloco super-only, auto-fill do catálogo: nunca conta pendência.
       n = 0;
-    } else if (isColunaGroup(groupName)) {
-      const id = (groupValue as Record<string, unknown>).id;
-      if (typeof id !== "string" || id.trim() === "") n = 1;
     } else {
-      for (const [, v] of Object.entries(
+      n = countPendentesInner(
+        groupName,
         groupValue as Record<string, unknown>,
-      )) {
-        const kind = inferFieldKind(v);
-        if (isFieldEmpty(v, kind)) n++;
-      }
+      );
     }
     perGroup[groupName] = n;
     total += n;
   }
   return { total, perGroup };
+}
+
+/** Walk recursivo: true se houver algum grupo/subgrupo `coluna_*` em
+ *  qualquer profundidade. Usado pra decidir se faz fetch live do CRM. */
+export function hasColunaAnywhere(cfg: DadosConfigGroup[]): boolean {
+  function walk(inner: Record<string, unknown>): boolean {
+    for (const [k, v] of Object.entries(inner)) {
+      if (isColunaGroup(k)) return true;
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+        if (walk(v as Record<string, unknown>)) return true;
+      }
+    }
+    return false;
+  }
+  for (const g of cfg) {
+    const name = Object.keys(g)[0];
+    if (!name) continue;
+    if (isColunaGroup(name)) return true;
+    const inner = g[name];
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      if (walk(inner as Record<string, unknown>)) return true;
+    }
+  }
+  return false;
 }

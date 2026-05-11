@@ -2,8 +2,8 @@
 
 import { SearchableSelect } from "@/components/data-table";
 import type { CrmStatus } from "@/server/actions/cliente-crm";
-import type { CrmStatusSlot } from "@/lib/db/schema";
 import { detectColunaTipo, slugifyFromNome } from "../dados-config-form";
+import { useCrmCtx } from "./crm-ctx";
 
 /** Picker LIVE pra grupos `coluna_*`. Substitui ColunaPicker antigo
  *  (que usava só cache do banco). Aqui cruza:
@@ -24,23 +24,20 @@ export function ColunaPickerLive({
   groupName,
   groupValue,
   onChange,
-  liveList,
-  cachedColunas,
-  pending,
-  fetchError,
-  onRefresh,
   disabled,
 }: {
   groupName: string;
   groupValue: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
-  liveList: CrmStatus[] | null;
-  cachedColunas: CrmStatusSlot[] | null;
-  pending: boolean;
-  fetchError: string | null;
-  onRefresh: () => void;
   disabled?: boolean;
 }) {
+  const {
+    liveList,
+    crmColunas: cachedColunas,
+    pendingLive: pending,
+    liveErr: fetchError,
+    refreshLive: onRefresh,
+  } = useCrmCtx();
   const tipo = detectColunaTipo(groupName);
   if (!tipo) return null;
 
@@ -90,14 +87,22 @@ export function ColunaPickerLive({
           const live = liveArr.find((x) => x.id === id);
           if (!live) return;
           const cached = cacheById.get(id);
-          // Slug: usa cache do tipo correto se existir; senão deriva
-          // do nome live + sufixo do tipo. Tipo é sempre o do grupo
-          // (groupName), não o do cache — evita herdar tipo errado
-          // se a coluna foi cadastrada como outro slot.
+          // Slug: prioriza o slug definido no template do catálogo
+          // (`groupValue.slug` já vem populado pelo template). Doc
+          // Notion "Slug da automação errado"
+          // (35c9084b98ef80ada281c30485082d06) — workflow N8N depende
+          // do slug do template, nunca de slug "inventado".
+          // Fallback: cache do tipo correto → slugify por nome+tipo.
+          const templateSlug =
+            typeof groupValue.slug === "string"
+              ? groupValue.slug.trim()
+              : "";
           const slug =
-            cached && cached.tipo === tipo
-              ? cached.slug
-              : slugifyFromNome(live.nome, tipo);
+            templateSlug !== ""
+              ? templateSlug
+              : cached && cached.tipo === tipo
+                ? cached.slug
+                : slugifyFromNome(live.nome, tipo);
           onChange({
             ...groupValue,
             id: live.id,

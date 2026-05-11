@@ -7,8 +7,8 @@ import { DESQUALIFICADO_SLUGS } from "@/lib/crm/slots";
 import {
   updateClienteFields,
   type UpdateClientePartial,
-} from "../../actions";
-import type { ClienteRow } from "../../clientes-table";
+} from "../../../actions";
+import type { ClienteRow } from "../../../clientes-table";
 import type { CrmStatusSlot, CrmStatusTipo } from "@/lib/db/schema";
 
 /**
@@ -49,11 +49,19 @@ export function ColunasCrmForm({ cliente }: { cliente: ClienteRow }) {
     for (const def of slotDefs) {
       const id = String(fd.get(`id_${def.slug}`) ?? "").trim();
       const nome = String(fd.get(`nome_${def.slug}`) ?? "").trim();
-      const notUsed = String(fd.get(`notused_${def.slug}`) ?? "") === "1";
-      if (id || nome || notUsed) anyFilled = true;
-      const slot: CrmStatusSlot = { slug: def.slug, tipo: def.tipo, id, nome };
-      if (notUsed) slot.notUsed = true;
-      slots.push(slot);
+      const etapa_id = String(fd.get(`etapa_id_${def.slug}`) ?? "").trim();
+      const etapa_nome = String(fd.get(`etapa_nome_${def.slug}`) ?? "").trim();
+      const not_used = String(fd.get(`notused_${def.slug}`) ?? "") === "1";
+      if (id || nome || not_used) anyFilled = true;
+      slots.push({
+        slug: def.slug,
+        tipo: def.tipo,
+        id,
+        nome,
+        etapa_id,
+        etapa_nome,
+        not_used,
+      });
     }
     if (!anyFilled) {
       setErr("Configure ao menos um slot antes de salvar.");

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { loadClienteOrForbid } from "./_data";
 import { Breadcrumb } from "./_components/breadcrumb";
 import { TabNav, type TabItem } from "./_components/tab-nav";
-import { PendenciasBanner } from "./_components/pendencias-banner";
 
 export default async function ClienteDrilldownLayout({
   children,
@@ -19,25 +18,23 @@ export default async function ClienteDrilldownLayout({
   const base = `/clientes/${clienteId}`;
 
   // Tabs disponíveis dependem da persona:
-  // - Super: Dados | Colunas CRM | Lojas | Vendedores | Agentes |
-  //   Automações | Leads | Agendamentos | Webhooks (Webhooks sempre
-  //   por último).
-  // - Cliente admin: Dados | Lojas | Vendedores | Agentes |
-  //   Automações | Leads | Agendamentos.
+  // - Super: Dados | Lojas | Agentes | Automações | Leads | Agendamentos |
+  //   Webhooks. Colunas CRM e Vendedores ficam DENTRO de Agentes (sub-tabs)
+  //   porque são configurações do agente, não do cliente. Doc Notion
+  //   "Remover vendedores e crm colunas do meio do cliente"
+  //   (35c9084b98ef805083d4c2a6f7a2e84a).
+  // - Cliente admin: Dados | Lojas | Agentes | Automações | Leads |
+  //   Agendamentos.
   // - Vendedor: mesmo conjunto do cliente admin (gating fino nas
-  //   listas/sub-rotas — vendedor só vê próprio uid, lojas vinculadas).
+  //   listas/sub-rotas).
   const tabs: TabItem[] = [
     { href: `${base}/dados`, label: "Dados" },
-  ];
-  if (isSuper) tabs.push({ href: `${base}/colunas-crm`, label: "Colunas CRM" });
-  tabs.push(
     { href: `${base}/lojas`, label: "Lojas" },
-    { href: `${base}/vendedores`, label: "Vendedores" },
     { href: `${base}/agentes`, label: "Agentes" },
     { href: `${base}/automacoes`, label: "Automações" },
     { href: `${base}/leads`, label: "Leads" },
     { href: `${base}/agendamentos`, label: "Agendamentos" },
-  );
+  ];
   if (isSuper) tabs.push({ href: `${base}/webhooks`, label: "Webhooks" });
 
   return (
@@ -66,13 +63,11 @@ export default async function ClienteDrilldownLayout({
         </Link>
       </div>
 
-      <PendenciasBanner cliente={cliente} isSuper={isSuper} />
-
       <div className="mt-4">
         <TabNav tabs={tabs} />
         <section
           style={{
-            backgroundColor: "var(--ink-2)",
+            backgroundColor: "var(--ink-3)",
             borderLeft: "1px solid var(--b-soft)",
             borderRight: "1px solid var(--b-soft)",
             borderBottom: "1px solid var(--b-soft)",

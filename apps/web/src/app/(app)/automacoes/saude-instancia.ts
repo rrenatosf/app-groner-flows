@@ -24,6 +24,7 @@ export type InstanciaRowFull = ClienteAutomacao & {
    *  template após instância criada (decisão consciente: instância
    *  não auto-sincroniza). */
   catalogoTemplate: DadosConfigGroup[];
+  catalogoComentarios: Record<string, string>;
 };
 
 export type CriticalInstanciaField = {
@@ -180,7 +181,7 @@ export function buildInstanciaValidation(
   const shapeOk = validateDadosConfiguracoes(cfg).ok;
   if (!shapeOk) return out;
 
-  // Grupo 1: dados_de_configuração (4 campos string não-vazios)
+  // Grupo 1: dados_de_configuracao (4 campos string não-vazios)
   {
     const g = findGroup(cfg, GROUP_DADOS_CONFIG);
     let status: "ok" | "warn" = "ok";
@@ -212,7 +213,7 @@ export function buildInstanciaValidation(
     }
     out.push({
       key: GROUP_DADOS_CONFIG,
-      label: "Grupo: dados_de_configuração",
+      label: "Grupo: dados_de_configuracao",
       expected: `objeto com ${DADOS_CONFIG_FIELDS.join(", ")} string não-vazios`,
       actual,
       status,

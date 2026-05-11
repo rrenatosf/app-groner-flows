@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { forbidden } from "next/navigation";
-import { loadClienteOrForbid } from "../../_data";
+import { loadClienteOrForbid } from "../../../_data";
 import { loadVendedor } from "./_data";
-import { TabNav, type TabItem } from "../../_components/tab-nav";
+import { TabNav, type TabItem } from "../../../_components/tab-nav";
 
 export default async function VendedorDrilldownLayout({
   children,
@@ -22,7 +22,7 @@ export default async function VendedorDrilldownLayout({
     forbidden();
   }
 
-  const base = `/clientes/${clienteId}/vendedores/${vendedorUid}`;
+  const base = `/clientes/${clienteId}/agentes/vendedores/${vendedorUid}`;
   const tabs: TabItem[] = [
     { href: `${base}/dados`, label: "Dados" },
     { href: `${base}/horarios`, label: "Horários" },
@@ -36,7 +36,7 @@ export default async function VendedorDrilldownLayout({
         className="text-[12px] text-[color:var(--fg-subtle)] flex items-center gap-1.5 flex-wrap"
       >
         <Link
-          href={`/clientes/${clienteId}/vendedores`}
+          href={`/clientes/${clienteId}/agentes/vendedores`}
           className="hover:text-[color:var(--fg)] transition-colors"
           style={{ color: "var(--fg-muted)" }}
         >
@@ -60,7 +60,7 @@ export default async function VendedorDrilldownLayout({
           uid: {vendedor.uid.slice(0, 8)}…
         </span>
         <Link
-          href={`/clientes/${cliente.id}/vendedores`}
+          href={`/clientes/${cliente.id}/agentes/vendedores`}
           className="ml-auto text-[11.5px] text-[color:var(--fg-muted)] hover:text-[color:var(--fg)] transition-colors"
         >
           ← Voltar para vendedores

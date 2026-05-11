@@ -9,10 +9,11 @@ import {
 } from "@/server/actions/cliente-crm";
 import {
   countPendentes,
-  isColunaGroup,
+  hasColunaAnywhere,
   isTemplateConfigGroup,
   TEMPLATE_CONFIG_FIELD_MAP,
 } from "../dados-config-form";
+import { CrmCtx } from "./crm-ctx";
 import {
   type DadosConfigGroup,
   validateDadosConfiguracoes,
@@ -66,15 +67,10 @@ export function ConfiguracoesForm({
   const [pendingLive, setPendingLive] = useState(false);
   const [liveErr, setLiveErr] = useState<string | null>(null);
 
-  // Otimização: só fetch se algum grupo é `coluna_*`. Memoizado pra
-  // evitar refetch toda vez que value muda — `hasColunaGroup` é
-  // estrutural, depende só de quais grupos existem.
+  // Otimização: só fetch se houver grupo/subgrupo `coluna_*` em qualquer
+  // profundidade. Walk recursivo via `hasColunaAnywhere`.
   const hasColunaGroup = useMemo(
-    () =>
-      value.some((g) => {
-        const k = Object.keys(g)[0];
-        return typeof k === "string" && isColunaGroup(k);
-      }),
+    () => hasColunaAnywhere(value),
     [value],
   );
 
@@ -193,7 +189,19 @@ export function ConfiguracoesForm({
     setRawMode(false);
   }
 
+  const crmCtxValue = useMemo(
+    () => ({
+      crmColunas,
+      liveList,
+      pendingLive,
+      liveErr,
+      refreshLive,
+    }),
+    [crmColunas, liveList, pendingLive, liveErr, refreshLive],
+  );
+
   return (
+    <CrmCtx.Provider value={crmCtxValue}>
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
@@ -337,11 +345,6 @@ export function ConfiguracoesForm({
                       groupValue={groupValue}
                       onChange={(nextInner) => updateGroup(idx, nextInner)}
                       pendencias={pendCount}
-                      crmColunas={crmColunas}
-                      liveList={liveList}
-                      pendingLive={pendingLive}
-                      liveErr={liveErr}
-                      refreshLive={refreshLive}
                       disabled={disabled}
                     />
                   );
@@ -373,5 +376,6 @@ export function ConfiguracoesForm({
         </div>
       )}
     </div>
+    </CrmCtx.Provider>
   );
 }

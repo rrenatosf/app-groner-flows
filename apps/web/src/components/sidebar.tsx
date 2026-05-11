@@ -58,7 +58,7 @@ export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
   return (
     <aside
-      className="w-64 shrink-0 hidden md:flex flex-col"
+      className="w-64 shrink-0 hidden md:flex flex-col sticky top-0 h-screen overflow-y-auto"
       style={{
         backgroundColor: "var(--ink-2)",
         borderRight: "1px solid var(--b-soft)",

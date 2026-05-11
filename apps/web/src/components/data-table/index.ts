@@ -1,3 +1,4 @@
+export { AbrirChip } from "./abrir-chip";
 export { AcessarButton } from "./acessar-button";
 export { BooleanToggle } from "./boolean-toggle";
 export { CopyButton, copyToClipboard } from "./copy-button";

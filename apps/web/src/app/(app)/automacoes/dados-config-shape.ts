@@ -99,10 +99,10 @@ export function validateDadosConfiguracoes(
 
 // --- Template canônico (Bloco G) ---
 //
-// Casing literal — preservar acentos e maiúsculas (`dados_de_configuração`,
-// `Email`) — não normalizar, são consumidos por workflows N8N externos.
+// Chaves snake_case ASCII (minúsculas + dígitos + `_`). Sem acentos pra
+// alinhar com a validação do builder e evitar quebra de parser N8N.
 
-export const GROUP_DADOS_CONFIG = "dados_de_configuração";
+export const GROUP_DADOS_CONFIG = "dados_de_configuracao";
 export const GROUP_COLUNA_INICIAL = "coluna_inicial";
 export const GROUP_COLUNA_QUALIFICACAO = "coluna_qualificacao";
 
@@ -150,6 +150,50 @@ export function getDefaultAutomacaoConfig(): DadosConfigGroup[] {
       },
     },
   ];
+}
+
+/** Valida que todas as chaves (grupo + items + sub-items recursivamente)
+ *  estão em snake_case ASCII. Aplicado ANTES de salvar — bloqueia template
+ *  com nome mal formado. Retorna primeira violação encontrada. */
+export function validateSnakeCaseKeys(
+  template: DadosConfigGroup[],
+): { ok: true } | Err {
+  const SNAKE_RE = /^[a-z][a-z0-9_]*$/;
+  function isSnake(s: string): boolean {
+    if (!SNAKE_RE.test(s)) return false;
+    if (s.endsWith("_")) return false;
+    if (s.includes("__")) return false;
+    return true;
+  }
+  function walkInner(value: unknown, path: string): Err | null {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (!isSnake(k)) {
+        return {
+          ok: false,
+          error: `Nome "${path}.${k}" fora do padrão snake_case (minúsculas ASCII, dígitos e _).`,
+        };
+      }
+      const childErr = walkInner(v, `${path}.${k}`);
+      if (childErr) return childErr;
+    }
+    return null;
+  }
+  for (const g of template) {
+    const groupName = Object.keys(g)[0] ?? "";
+    if (!isSnake(groupName)) {
+      return {
+        ok: false,
+        error: `Título do grupo "${groupName}" fora do padrão snake_case (minúsculas ASCII, dígitos e _).`,
+      };
+    }
+    const inner = g[groupName];
+    const err = walkInner(inner, groupName);
+    if (err) return err;
+  }
+  return { ok: true };
 }
 
 /** Encontra o objeto interno de um grupo pelo nome. */

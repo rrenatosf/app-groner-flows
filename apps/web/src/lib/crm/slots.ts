@@ -54,12 +54,20 @@ export function normalizeSlot(input: unknown): CrmStatusSlot | null {
   const id = String(o.id ?? "");
   const slug = String(o.slug ?? "");
   const tipoRaw = String(o.tipo ?? "");
-  const notUsed = o.notUsed === true;
+  const etapa_id = String(o.etapa_id ?? o.etapaId ?? "");
+  const etapa_nome = String(o.etapa_nome ?? o.etapaNome ?? "");
+  const not_used = o.not_used === true || o.notUsed === true;
   if (!id && !nome && !slug) return null;
   if (!TIPOS_VALIDOS.has(tipoRaw as CrmStatusTipo)) return null;
-  const out: CrmStatusSlot = { nome, id, slug, tipo: tipoRaw as CrmStatusTipo };
-  if (notUsed) out.notUsed = true;
-  return out;
+  return {
+    nome,
+    id,
+    slug,
+    tipo: tipoRaw as CrmStatusTipo,
+    etapa_id,
+    etapa_nome,
+    not_used,
+  };
 }
 
 export function normalizeSlotList(input: unknown): CrmStatusSlot[] {
@@ -77,8 +85,17 @@ export function makeSlot(
   id: string,
   slug: string,
   tipo: CrmStatusTipo,
+  extras?: { etapa_id?: string; etapa_nome?: string; not_used?: boolean },
 ): CrmStatusSlot {
-  return { nome, id, slug, tipo };
+  return {
+    nome,
+    id,
+    slug,
+    tipo,
+    etapa_id: extras?.etapa_id ?? "",
+    etapa_nome: extras?.etapa_nome ?? "",
+    not_used: extras?.not_used ?? false,
+  };
 }
 
 export function findByTipo(
@@ -106,17 +123,19 @@ export function filterDesqualificacao(list: CrmStatusSlot[]): CrmStatusSlot[] {
  * nome+id depois (manualmente ou via "Buscar do CRM").
  */
 export function defaultCrmStatusColunas(): CrmStatusSlot[] {
+  const base = {
+    nome: "",
+    id: "",
+    etapa_id: "",
+    etapa_nome: "",
+    not_used: false,
+  };
   const out: CrmStatusSlot[] = [
-    { nome: "", id: "", slug: STATUS_INICIAL_SLUG, tipo: "inicial" },
-    {
-      nome: "",
-      id: "",
-      slug: STATUS_QUALIFICADO_SLUG,
-      tipo: "qualificacao",
-    },
+    { ...base, slug: STATUS_INICIAL_SLUG, tipo: "inicial" },
+    { ...base, slug: STATUS_QUALIFICADO_SLUG, tipo: "qualificacao" },
   ];
   for (const d of DESQUALIFICADO_SLUGS) {
-    out.push({ nome: "", id: "", slug: d.slug, tipo: "desqualificacao" });
+    out.push({ ...base, slug: d.slug, tipo: "desqualificacao" });
   }
   return out;
 }

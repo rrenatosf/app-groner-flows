@@ -12,6 +12,10 @@ export type LeadRow = Lead & {
   clienteNome: string | null;
   clienteTenant: string | null;
   vendedorNome: string | null;
+  /** Nome do catálogo da automação vinculada (cliente_automacoes.id →
+   *  automacoes.nome). NULL = lead sem automação. Opcional pra retro-
+   *  compat com pages que ainda não populam (cliente drilldown / loja). */
+  clienteAutomacaoNome?: string | null;
 };
 
 export type CriticalLeadField = {

@@ -2,7 +2,7 @@ import { isPlaceholderLoja, type Loja } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { clientes } from "@/lib/db/schema";
-import { loadClienteOrForbid, loadVendedoresFromCliente } from "../../../_data";
+import { loadClienteOrForbid, loadVendedoresFromCliente } from "../../../../_data";
 import { loadVendedor } from "../_data";
 import { VendedorDadosForm } from "./vendedor-dados-form";
 

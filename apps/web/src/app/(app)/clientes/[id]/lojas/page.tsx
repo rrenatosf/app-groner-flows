@@ -8,12 +8,13 @@ export default async function ClienteLojasPage({
 }) {
   const { id } = await params;
   const clienteId = Number(id);
-  const { cliente, isSuper, isVendedor } = await loadClienteOrForbid(clienteId);
+  const { cliente, isSuper } = await loadClienteOrForbid(clienteId);
   // Filtra lojas pela visibilidade do caller (vendedor só vê suas).
   const lojas = await loadLojasVisiveis(clienteId);
 
-  // Cliente kind=cliente edita; vendedor (kind=usuario) é read-only.
-  const canEdit = !isVendedor;
+  // Dados de loja só super edita — cliente comum ou vendedor são read-only.
+  // Edição inadvertida pelo cliente quebrava automações.
+  const canEdit = isSuper;
 
   const rows: LojaRow[] = lojas.map((loja) => ({
     clienteId: cliente.id,

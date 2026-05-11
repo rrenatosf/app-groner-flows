@@ -191,6 +191,8 @@ export const loadInstanciasFromCliente = cache(
         catalogoWorkflowId: automacoes.n8nWorkflowId,
         catalogoVersao: automacoes.versao,
         catalogoTemplate: automacoes.dadosConfiguracoesTemplate,
+        catalogoComentarios: automacoes.dadosComentarios,
+        prompt: clientesAutomacoes.prompt,
       })
       .from(clientesAutomacoes)
       .innerJoin(
@@ -231,6 +233,8 @@ export const loadInstanciasFromLoja = cache(
         catalogoWorkflowId: automacoes.n8nWorkflowId,
         catalogoVersao: automacoes.versao,
         catalogoTemplate: automacoes.dadosConfiguracoesTemplate,
+        catalogoComentarios: automacoes.dadosComentarios,
+        prompt: clientesAutomacoes.prompt,
       })
       .from(clientesAutomacoes)
       .innerJoin(

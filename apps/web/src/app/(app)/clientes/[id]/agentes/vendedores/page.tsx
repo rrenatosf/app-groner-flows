@@ -2,11 +2,11 @@ import { isPlaceholderLoja, type Loja } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { clientes } from "@/lib/db/schema";
-import { loadClienteOrForbid, loadVendedoresFromCliente } from "../_data";
+import { loadClienteOrForbid, loadVendedoresFromCliente } from "../../_data";
 import {
   UsuariosTable,
   type UsuarioRow,
-} from "../../../usuarios/usuarios-table";
+} from "../../../../usuarios/usuarios-table";
 
 export default async function ClienteVendedoresPage({
   params,

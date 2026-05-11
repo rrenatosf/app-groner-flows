@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { SearchBox } from "@/components/search-box";
 import {
+  AbrirChip,
   ColumnPicker,
   HealthToggle,
   IconCheck,
@@ -25,7 +26,9 @@ import {
   type PageSize,
 } from "@/components/data-table";
 import {
+  updateLeadAutomacao,
   updateLeadCell,
+  type AutomacaoOption,
   type EditableLeadKey,
   type VendedorOption,
 } from "./actions";
@@ -39,6 +42,7 @@ type ColKey =
   | "etapaNome"
   | "statusNome"
   | "vendedorNome"
+  | "automacaoNome"
   | "stepFollowup"
   | "statusFollowup"
   | "proximoFollowup"
@@ -55,7 +59,7 @@ type ColDef = {
   superOnly?: boolean;
   readOnly?: boolean;
   /** Edit kind aplicável a coluna inline. */
-  editKind?: "text" | "numeric" | "datetime" | "vendedor";
+  editKind?: "text" | "numeric" | "datetime" | "vendedor" | "automacao";
 };
 
 const COLUMNS: ColDef[] = [
@@ -65,6 +69,7 @@ const COLUMNS: ColDef[] = [
   { key: "etapaNome", label: "Etapa", readOnly: true },
   { key: "statusNome", label: "Status", readOnly: true },
   { key: "vendedorNome", label: "Vendedor", editKind: "vendedor" },
+  { key: "automacaoNome", label: "Automação", editKind: "automacao" },
   {
     key: "stepFollowup",
     label: "Tentativas",
@@ -128,6 +133,7 @@ function valueFor(r: LeadRow, key: ColKey): unknown {
   if (key === "saude") return pendenciasFor(r).length;
   if (key === "validacao") return 0;
   if (key === "vendedorNome") return r.vendedorNome ?? "";
+  if (key === "automacaoNome") return r.clienteAutomacaoNome ?? "";
   if (key === "createdAt") return r.createdAt ?? null;
   if (key === "proximoFollowup") return r.proximoFollowup ?? null;
   if (key === "agendamentoId") return r.agendamentoId ?? "";
@@ -141,6 +147,7 @@ function displayFor(r: LeadRow, key: ColKey): string {
   if (key === "proximoFollowup")
     return r.proximoFollowup ? dt.format(new Date(r.proximoFollowup)) : "—";
   if (key === "vendedorNome") return r.vendedorNome ?? "(IA)";
+  if (key === "automacaoNome") return r.clienteAutomacaoNome ?? "—";
   if (key === "agendamentoId")
     return r.agendamentoId !== null ? `#${r.agendamentoId}` : "—";
   return fmtVal(valueFor(r, key));
@@ -152,6 +159,7 @@ function isCellMissing(r: LeadRow, key: ColKey): boolean {
     key === "saude" ||
     key === "validacao" ||
     key === "vendedorNome" ||
+    key === "automacaoNome" ||
     key === "agendamentoId" ||
     key === "createdAt"
   )
@@ -186,6 +194,7 @@ export function LeadsTable({
   canEdit,
   isVendedor,
   vendedoresPorCliente,
+  automacoesPorCliente,
   readOnlyReason = null,
   embedded = false,
 }: {
@@ -195,6 +204,9 @@ export function LeadsTable({
   isVendedor: boolean;
   /** Map clienteId → lista de vendedores ativos pra picker. */
   vendedoresPorCliente: Record<number, VendedorOption[]>;
+  /** Map clienteId → lista de automações vinculadas (cliente_automacoes
+   *  + nome do catálogo). Pro dropdown de seleção da automação. */
+  automacoesPorCliente?: Record<number, AutomacaoOption[]>;
   /** Quando set, renderiza banner explicativo. Cobre drilldowns embedded. */
   readOnlyReason?: "cliente-admin" | null;
   /** Renderiza dentro do drilldown — esconde toolbar redundante. */
@@ -278,13 +290,113 @@ export function LeadsTable({
 
   // Filtro super-only por nome.
   const [filtro, setFiltro] = useState("");
+  // Filtro por cliente/loja (super-only). null = todos.
+  const [filterClienteId, setFilterClienteId] = useState<number | null>(null);
+  // Filtro por automação atendendo o lead. null = todos. -1 = "(sem automação)".
+  const [filterAutomacaoId, setFilterAutomacaoId] = useState<number | null>(
+    null,
+  );
+  // Filtro por vendedor (SDR). null = todos. 0 = "(IA — sem vendedor)".
+  const [filterVendedorId, setFilterVendedorId] = useState<number | null>(
+    null,
+  );
+
+  const clienteOptions = useMemo(() => {
+    const map = new Map<number, { id: number; label: string }>();
+    for (const r of sortedRows) {
+      const id = r.clienteId ?? 0;
+      if (id === 0) continue;
+      if (map.has(id)) continue;
+      map.set(id, {
+        id,
+        label: r.clienteNome ?? r.clienteTenant ?? `#${id}`,
+      });
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }),
+    );
+  }, [sortedRows]);
+
+  // Opções de automação — agrega entre todos os clientes filtrados.
+  const automacaoFilterOptions = useMemo(() => {
+    const map = new Map<number, { id: number; label: string }>();
+    map.set(-1, { id: -1, label: "(sem automação)" });
+    if (automacoesPorCliente) {
+      const allowedCliente =
+        filterClienteId !== null ? [filterClienteId] : null;
+      for (const [cid, list] of Object.entries(automacoesPorCliente)) {
+        const cidNum = Number(cid);
+        if (allowedCliente && !allowedCliente.includes(cidNum)) continue;
+        for (const a of list) {
+          if (map.has(a.id)) continue;
+          map.set(a.id, {
+            id: a.id,
+            label: `${a.nome}${a.versao ? ` · v${a.versao}` : ""}`,
+          });
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.id === -1) return -1;
+      if (b.id === -1) return 1;
+      return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+    });
+  }, [automacoesPorCliente, filterClienteId]);
+
+  // Opções de vendedor (SDR). Agrega entre clientes filtrados. 0 = sem vendedor.
+  const vendedorFilterOptions = useMemo(() => {
+    const map = new Map<number, { id: number; label: string }>();
+    map.set(0, { id: 0, label: "(IA — sem vendedor)" });
+    const allowedCliente =
+      filterClienteId !== null ? [filterClienteId] : null;
+    for (const [cid, list] of Object.entries(vendedoresPorCliente)) {
+      const cidNum = Number(cid);
+      if (allowedCliente && !allowedCliente.includes(cidNum)) continue;
+      for (const v of list) {
+        if (map.has(v.id)) continue;
+        map.set(v.id, { id: v.id, label: v.nome });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.id === 0) return -1;
+      if (b.id === 0) return 1;
+      return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+    });
+  }, [vendedoresPorCliente, filterClienteId]);
+
   const filteredRows = useMemo(() => {
     const q = filtro.trim().toLowerCase();
-    if (!q) return sortedRows;
-    return sortedRows.filter((r) =>
-      String(r.nome ?? "").toLowerCase().includes(q),
-    );
-  }, [sortedRows, filtro]);
+    let arr = sortedRows;
+    if (filterClienteId !== null) {
+      arr = arr.filter((r) => r.clienteId === filterClienteId);
+    }
+    if (filterAutomacaoId !== null) {
+      if (filterAutomacaoId === -1) {
+        arr = arr.filter((r) => r.clienteAutomacaoId === null);
+      } else {
+        arr = arr.filter((r) => r.clienteAutomacaoId === filterAutomacaoId);
+      }
+    }
+    if (filterVendedorId !== null) {
+      if (filterVendedorId === 0) {
+        arr = arr.filter((r) => r.vendedorId === null);
+      } else {
+        arr = arr.filter((r) => r.vendedorId === filterVendedorId);
+      }
+    }
+    if (q) {
+      arr = arr.filter((r) =>
+        String(r.nome ?? "").toLowerCase().includes(q),
+      );
+    }
+    return arr;
+  }, [
+    sortedRows,
+    filtro,
+    filterClienteId,
+    filterAutomacaoId,
+    filterVendedorId,
+  ]);
 
   // Agrupar por cliente (super-only).
   const [groupByCliente, setGroupByCliente] = useState(false);
@@ -416,6 +528,19 @@ export function LeadsTable({
     });
   }
 
+  function commitAutomacao(leadId: number, automacaoId: number | null) {
+    setSaveErr(null);
+    startTransition(async () => {
+      const res = await updateLeadAutomacao(leadId, automacaoId);
+      if (!res.ok) {
+        setSaveErr(res.error);
+        return;
+      }
+      setEditing(null);
+      router.refresh();
+    });
+  }
+
   const [editTarget, setEditTarget] = useState<LeadRow | null>(null);
   const [validacaoTarget, setValidacaoTarget] = useState<LeadRow | null>(null);
 
@@ -486,6 +611,10 @@ export function LeadsTable({
       r.clienteId !== null
         ? vendedoresPorCliente[r.clienteId] ?? []
         : [];
+    const automacaoOptions =
+      r.clienteId !== null
+        ? automacoesPorCliente?.[r.clienteId] ?? []
+        : [];
 
     return (
       <tr
@@ -499,15 +628,18 @@ export function LeadsTable({
           const isCellSelected =
             selected?.r === rIdx && selected?.c === ci;
           const isVendedorCell = d.key === "vendedorNome";
-          // Vendedor (kind=usuario) só edita follow-ups, e nunca o vendedorNome.
+          const isAutomacaoCell = d.key === "automacaoNome";
+          // Vendedor (kind=usuario) só edita follow-ups — nunca vendedorNome
+          // nem automacaoNome (atribuição é gestão).
           const editable =
             canEdit &&
             !d.readOnly &&
-            (!isVendedor || (d.key !== "vendedorNome"));
+            (!isVendedor ||
+              (d.key !== "vendedorNome" && d.key !== "automacaoNome"));
 
           const tdClass =
             (d.align === "center" ? "text-center" : "") +
-            (d.key === "nome" ? " font-medium" : "");
+            (d.key === "nome" ? " font-medium cell-abrir" : "");
 
           return (
             <td
@@ -550,6 +682,14 @@ export function LeadsTable({
                   onCancel={cancelEdit}
                   onCommit={(id) => commitVendedor(r.id, id)}
                 />
+              ) : isEditing && isAutomacaoCell ? (
+                <AutomacaoCellEditor
+                  current={r.clienteAutomacaoId}
+                  options={automacaoOptions}
+                  pending={pending}
+                  onCancel={cancelEdit}
+                  onCommit={(id) => commitAutomacao(r.id, id)}
+                />
               ) : isEditing ? (
                 <CellEditor
                   def={d}
@@ -589,6 +729,14 @@ export function LeadsTable({
                     >
                       <IconInfo size={12} />
                     </span>
+                  )}
+                  {d.key === "nome" && (
+                    <AbrirChip
+                      onClick={() => setEditTarget(r)}
+                      ariaLabel={`Abrir lead ${r.nome ?? `#${r.id}`}`}
+                      title="Abrir detalhes do lead"
+                      floatRight
+                    />
                   )}
                   {editable && (
                     <button
@@ -684,6 +832,48 @@ export function LeadsTable({
                 width: "200px",
               }}
             />
+          )}
+          {isSuper && clienteOptions.length > 0 && (
+            <div style={{ width: "200px" }}>
+              <SearchableSelect<{ id: number; label: string }, number>
+                items={clienteOptions}
+                value={filterClienteId}
+                onChange={(id) => setFilterClienteId(id)}
+                getKey={(c) => c.id}
+                getLabel={(c) => c.label}
+                placeholder="Filtrar por loja…"
+                searchPlaceholder="Buscar loja..."
+                width={220}
+              />
+            </div>
+          )}
+          {automacaoFilterOptions.length > 1 && (
+            <div style={{ width: "200px" }}>
+              <SearchableSelect<{ id: number; label: string }, number>
+                items={automacaoFilterOptions}
+                value={filterAutomacaoId}
+                onChange={(id) => setFilterAutomacaoId(id)}
+                getKey={(c) => c.id}
+                getLabel={(c) => c.label}
+                placeholder="Filtrar por automação…"
+                searchPlaceholder="Buscar automação..."
+                width={240}
+              />
+            </div>
+          )}
+          {vendedorFilterOptions.length > 1 && (
+            <div style={{ width: "200px" }}>
+              <SearchableSelect<{ id: number; label: string }, number>
+                items={vendedorFilterOptions}
+                value={filterVendedorId}
+                onChange={(id) => setFilterVendedorId(id)}
+                getKey={(c) => c.id}
+                getLabel={(c) => c.label}
+                placeholder="Filtrar por SDR…"
+                searchPlaceholder="Buscar vendedor..."
+                width={220}
+              />
+            </div>
           )}
           {isSuper && (
             <button
@@ -1074,6 +1264,68 @@ function VendedorCellEditor({
           placeholder="Selecionar…"
           searchPlaceholder="Buscar vendedor…"
           width={300}
+          disabled={pending}
+        />
+      </div>
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onCancel}
+        disabled={pending}
+        className="text-[10px] text-[color:var(--fg-subtle)]"
+      >
+        ✕
+      </button>
+    </span>
+  );
+}
+
+function AutomacaoCellEditor({
+  current,
+  options,
+  pending,
+  onCancel,
+  onCommit,
+}: {
+  current: number | null;
+  options: AutomacaoOption[];
+  pending: boolean;
+  onCancel: () => void;
+  onCommit: (id: number | null) => void;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1"
+      style={{ position: "relative", zIndex: 10, minWidth: 240 }}
+    >
+      <div style={{ minWidth: 240 }}>
+        <SearchableSelect
+          items={[
+            {
+              id: 0,
+              lojaId: "",
+              nome: "(sem automação)",
+              versao: null,
+              isActive: true,
+            } as AutomacaoOption,
+            ...options,
+          ]}
+          value={current ?? 0}
+          onChange={(k) => {
+            const id = k === 0 ? null : (k as number);
+            onCommit(id);
+          }}
+          getKey={(o) => o.id}
+          getLabel={(o) =>
+            o.id === 0
+              ? o.nome
+              : `${o.nome}${o.versao ? ` · v${o.versao}` : ""}${
+                  !o.isActive ? " · inativa" : ""
+                }`
+          }
+          placeholder="Selecionar automação…"
+          searchPlaceholder="Buscar automação…"
+          width={320}
           disabled={pending}
         />
       </div>

@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import type { Vendedor } from "@/lib/db/schema";
 import { SearchBox } from "@/components/search-box";
 import {
+  AbrirChip,
   AcessarButton,
   BooleanToggle,
   ColumnPicker,
@@ -618,7 +619,7 @@ export function UsuariosTable({
             d.editKind === "boolean" && editable && !isEditing;
           const tdClass =
             (d.align === "center" ? "text-center" : "") +
-            (d.key === "nome" ? " font-medium" : "");
+            (d.key === "nome" ? " font-medium cell-abrir" : "");
 
           return (
             <td
@@ -645,7 +646,7 @@ export function UsuariosTable({
             >
               {d.key === "acoes" ? (
                 <AcessarButton
-                  href={`/clientes/${r.clienteId}/vendedores/${uid}/dados`}
+                  href={`/clientes/${r.clienteId}/agentes/vendedores/${uid}/dados`}
                   ariaLabel={`Acessar dados do vendedor ${r.vendedor.nome?.trim() || `#${uid.slice(0, 8)}`}`}
                 />
               ) : d.key === "saude" ? (
@@ -737,6 +738,14 @@ export function UsuariosTable({
                     >
                       <IconInfo size={12} />
                     </span>
+                  )}
+                  {d.key === "nome" && (
+                    <AbrirChip
+                      onClick={() => setEditTarget(r)}
+                      ariaLabel={`Abrir configurações do usuário ${r.vendedor.nome ?? `#${uid.slice(0, 8)}`}`}
+                      title="Abrir configurações do usuário"
+                      floatRight
+                    />
                   )}
                   {editable && (
                     <button

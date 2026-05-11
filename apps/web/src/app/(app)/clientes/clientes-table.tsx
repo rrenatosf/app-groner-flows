@@ -1011,7 +1011,8 @@ export function ClientesTable({
                       d.editKind === "boolean" && editable && isSuper;
                     const tdClass =
                       (cell.className ?? "") +
-                      (d.align === "center" ? " text-center" : "");
+                      (d.align === "center" ? " text-center" : "") +
+                      (d.key === "nome" ? " cell-abrir" : "");
 
                     return (
                       <td
@@ -1140,7 +1141,7 @@ export function ClientesTable({
                                     onClick={(e) => e.stopPropagation()}
                                     aria-label={`Abrir cadastro de ${c.nome ?? `cliente #${c.id}`}`}
                                     title="Abrir cadastro do cliente"
-                                    className="chip chip-mint text-[10.5px] px-1.5 py-0.5 transition-colors whitespace-nowrap shrink-0 ml-auto"
+                                    className="chip chip-mint text-[10.5px] px-1.5 py-0.5 transition-colors whitespace-nowrap shrink-0 absolute right-3 top-1/2 -translate-y-1/2"
                                   >
                                     Abrir
                                   </Link>

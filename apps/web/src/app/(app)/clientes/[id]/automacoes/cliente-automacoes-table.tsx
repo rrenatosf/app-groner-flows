@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AbrirChip,
   BooleanToggle,
   HealthToggle,
   IconCheck,
@@ -14,6 +15,7 @@ import {
   type PageSize,
 } from "@/components/data-table";
 import {
+  removeClienteAutomacao,
   updateClienteAutomacaoCell,
   type EditableInstanciaKey,
 } from "../../../automacoes/actions";
@@ -181,6 +183,24 @@ export function ClienteAutomacoesTable({
     commitCell(instanciaId, "isActive", !current);
   }
 
+  function handleDelete(r: InstanciaRowFull) {
+    if (
+      !confirm(
+        `Excluir vínculo "${r.catalogoNome ?? "(sem nome)"}" da loja "${lojasMap.get(r.lojaId) ?? r.lojaId}"?\n\nO catálogo permanece intacto — você pode reatribuir depois.`,
+      )
+    )
+      return;
+    setSaveErr(null);
+    startTransition(async () => {
+      const res = await removeClienteAutomacao(r.id);
+      if (!res.ok) {
+        setSaveErr(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   const [novoOpen, setNovoOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<InstanciaRowFull | null>(null);
 
@@ -240,13 +260,14 @@ export function ClienteAutomacoesTable({
                 <Th label="Saúde" k="saude" align="center" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               )}
               <th className="text-center">Ações</th>
+              {canEdit && <th className="text-center">Excluir</th>}
             </tr>
           </thead>
           <tbody>
             {pagedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={showHealth ? 6 : 5}
+                  colSpan={(showHealth ? 6 : 5) + (canEdit ? 1 : 0)}
                   className="text-center text-[color:var(--fg-subtle)] py-6"
                 >
                   Nenhuma automação atribuída ainda.
@@ -263,7 +284,7 @@ export function ClienteAutomacoesTable({
                   onDoubleClick={() => setEditTarget(r)}
                   style={{ cursor: "default" }}
                 >
-                  <td className="font-medium">
+                  <td className="font-medium cell-abrir" style={{ position: "relative" }}>
                     <span title={r.catalogoNome ?? ""}>
                       {r.catalogoNome ?? "—"}
                       {r.catalogoVersao ? (
@@ -275,6 +296,12 @@ export function ClienteAutomacoesTable({
                         </span>
                       ) : null}
                     </span>
+                    <AbrirChip
+                      onClick={() => setEditTarget(r)}
+                      ariaLabel={`Abrir configurações de ${r.catalogoNome ?? `instância #${r.id}`}`}
+                      title="Abrir configurações da instância"
+                      floatRight
+                    />
                   </td>
                   <td>
                     {isEditingLoja && canEdit && !lojaTravada ? (
@@ -367,6 +394,28 @@ export function ClienteAutomacoesTable({
                       Editar
                     </button>
                   </td>
+                  {canEdit && (
+                    <td className="text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(r);
+                        }}
+                        disabled={pending}
+                        aria-label={`Excluir vínculo de ${r.catalogoNome ?? `instância #${r.id}`}`}
+                        title="Excluir vínculo (catálogo é preservado)"
+                        className="text-[11px] px-2 py-0.5 rounded-md hover:brightness-110 disabled:opacity-50"
+                        style={{
+                          backgroundColor: "var(--rose-bg)",
+                          color: "var(--rose-300)",
+                          border: "1px solid var(--rose-border)",
+                        }}
+                      >
+                        Excluir
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}

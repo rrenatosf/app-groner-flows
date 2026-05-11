@@ -73,7 +73,11 @@ export function InstanciaNovoModal({
     }
   }, [open, forcedLojaId]);
 
-  // Quando seleciona automação, copia template do catálogo (deep clone).
+  // Quando seleciona automação, copia template do catálogo (deep clone)
+  // + aplica autofill imediato dos campos contextuais (crm_token, crm_tenant
+  // etc) se a loja já estiver selecionada. Bug anterior: ao trocar automacao
+  // depois da loja, config era resetada pro template puro e autofill não
+  // re-disparava (effect autofill só rodava em mudança de lojaId).
   useEffect(() => {
     if (!open || automacaoId === null) return;
     const cat = catalogo.find((c) => c.id === automacaoId);
@@ -85,8 +89,15 @@ export function InstanciaNovoModal({
       tpl.length > 0
         ? (JSON.parse(JSON.stringify(tpl)) as DadosConfigGroup[])
         : getDefaultAutomacaoConfig();
-    setConfig(cloned);
-  }, [open, automacaoId, catalogo]);
+    const loja = lojaId ? lojas.find((l) => l.id === lojaId) : undefined;
+    const filled = autofillContextFields(cloned, {
+      clienteId,
+      lojaId,
+      cliente,
+      loja,
+    });
+    setConfig(filled);
+  }, [open, automacaoId, catalogo, lojaId, lojas, clienteId, cliente]);
 
   // Auto-fill campos contextuais (loja_id, cliente_id, crm_*) quando
   // loja é selecionada — só preenche campos vazios, não sobrescreve
@@ -261,14 +272,18 @@ export function InstanciaNovoModal({
 
           {selectedCat && (
             <div className="sm:col-span-2 grid grid-cols-2 gap-3">
-              <InfoBlock
-                label="Base URL (catálogo)"
-                value={selectedCat.baseUrl ?? "—"}
-              />
-              <InfoBlock
-                label="Workflow n8n (catálogo)"
-                value={selectedCat.n8nWorkflowId ?? "—"}
-              />
+              {isSuper && (
+                <>
+                  <InfoBlock
+                    label="Base URL (catálogo)"
+                    value={selectedCat.baseUrl ?? "—"}
+                  />
+                  <InfoBlock
+                    label="Workflow n8n (catálogo)"
+                    value={selectedCat.n8nWorkflowId ?? "—"}
+                  />
+                </>
+              )}
               {selectedCat.descricao && (
                 <div className="col-span-2">
                   <InfoBlock

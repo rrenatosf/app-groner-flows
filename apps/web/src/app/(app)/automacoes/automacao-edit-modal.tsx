@@ -12,9 +12,12 @@ import {
   type UpdateCatalogoAutomacaoPartial,
 } from "./actions";
 import {
+  type DadosConfigGroup,
   validateDadosConfiguracoes,
+  validateSnakeCaseKeys,
   getDefaultAutomacaoConfig,
 } from "./dados-config-shape";
+import { TemplateBuilder } from "./_form/TemplateBuilder";
 import {
   buildCatalogoValidation,
   pendenciasCatalogoFor,
@@ -44,6 +47,12 @@ export function AutomacaoEditModal({
   const [templateText, setTemplateText] = useState("[]");
   const [templateValid, setTemplateValid] = useState(true);
   const [templateErr, setTemplateErr] = useState<string | null>(null);
+  const [comentarios, setComentarios] = useState<Record<string, string>>(
+    {},
+  );
+  const [initialComentarios, setInitialComentarios] = useState<
+    Record<string, string>
+  >({});
   const [validacaoOpen, setValidacaoOpen] = useState(false);
   const [initialForm, setInitialForm] = useState<Record<string, string>>({});
   const [initialIsActive, setInitialIsActive] = useState(true);
@@ -78,18 +87,40 @@ export function AutomacaoEditModal({
       setInitialTemplate(tplText);
       setTemplateValid(true);
       setTemplateErr(null);
+      const cmt =
+        target.dadosComentarios && typeof target.dadosComentarios === "object"
+          ? (target.dadosComentarios as Record<string, string>)
+          : {};
+      setComentarios(cmt);
+      setInitialComentarios(cmt);
     }
   }, [open, target]);
 
   const isDirty = useDirtyForm(
-    { form: initialForm, isActive: initialIsActive, templateText: initialTemplate },
-    { form, isActive, templateText },
+    {
+      form: initialForm,
+      isActive: initialIsActive,
+      templateText: initialTemplate,
+      comentarios: initialComentarios,
+    },
+    { form, isActive, templateText, comentarios },
   );
 
   const pendencias = useMemo(
     () => (target ? pendenciasCatalogoFor(target) : []),
     [target],
   );
+
+  // Parse pro builder. Erro vira array vazio — Validar mostra detalhe.
+  const tplParsed = useMemo<DadosConfigGroup[]>(() => {
+    try {
+      const p = JSON.parse(templateText);
+      if (!Array.isArray(p)) return [];
+      return p as DadosConfigGroup[];
+    } catch {
+      return [];
+    }
+  }, [templateText]);
 
   if (!open || !target) return null;
 
@@ -109,6 +140,8 @@ export function AutomacaoEditModal({
     }
     const v = validateDadosConfiguracoes(parsed);
     if (!v.ok) return { ok: false, error: v.error };
+    const sk = validateSnakeCaseKeys(v.v);
+    if (!sk.ok) return { ok: false, error: sk.error };
     return { ok: true, v: v.v };
   }
 
@@ -152,6 +185,9 @@ export function AutomacaoEditModal({
     const tplPrev = JSON.stringify(target.dadosConfiguracoesTemplate ?? []);
     const tplNext = JSON.stringify(tplRes.v);
     const tplChanged = tplPrev !== tplNext;
+    const cmtPrev = JSON.stringify(target.dadosComentarios ?? {});
+    const cmtNext = JSON.stringify(comentarios);
+    const cmtChanged = cmtPrev !== cmtNext;
 
     startTransition(async () => {
       const res = await updateCatalogoAutomacaoFields(target.id, patch);
@@ -159,10 +195,11 @@ export function AutomacaoEditModal({
         setErr(res.error);
         return;
       }
-      if (tplChanged) {
+      if (tplChanged || cmtChanged) {
         const tplSave = await updateTemplateConfiguracoes(
           target.id,
           tplRes.v,
+          cmtChanged ? comentarios : undefined,
         );
         if (!tplSave.ok) {
           setErr(tplSave.error);
@@ -373,35 +410,11 @@ export function AutomacaoEditModal({
               Editar o template aqui não afeta clientes que já têm essa
               automação atribuída. Atinge apenas instâncias futuras.
             </div>
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] uppercase tracking-wider text-[color:var(--fg-subtle)]">
-                Template (JSON — array de objetos com 1 chave por grupo)
-              </span>
-              <textarea
-                value={templateText}
-                onChange={(e) => {
-                  setTemplateText(e.target.value);
-                  setTemplateValid(true);
-                  setTemplateErr(null);
-                }}
-                disabled={pending || !canEdit}
-                rows={18}
-                spellCheck={false}
-                className={`input-edit${templateValid ? "" : " is-error"}`}
-                style={{
-                  resize: "vertical",
-                  fontFamily:
-                    "var(--font-geist-mono), ui-monospace, monospace",
-                  lineHeight: "1.6",
-                  minHeight: "320px",
-                  tabSize: 2,
-                }}
-              />
-            </label>
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] text-[color:var(--fg-subtle)]">
-                Template canônico tem 3 grupos: dados_de_configuração,
-                coluna_inicial, coluna_qualificacao.
+                Cada grupo (título) contém itens com nome e tipo. Template
+                canônico tem 3 grupos: dados_de_configuracao, coluna_inicial,
+                coluna_qualificacao.
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -438,6 +451,17 @@ export function AutomacaoEditModal({
                 </button>
               </div>
             </div>
+            <TemplateBuilder
+              value={tplParsed}
+              onChange={(next) => {
+                setTemplateText(JSON.stringify(next, null, 2));
+                setTemplateValid(true);
+                setTemplateErr(null);
+              }}
+              meta={comentarios}
+              onMetaChange={setComentarios}
+              disabled={pending || !canEdit}
+            />
             {!templateValid && templateErr && (
               <div
                 className="text-[12px] px-3 py-2 rounded-md"

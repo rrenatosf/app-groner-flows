@@ -1,4 +1,4 @@
-import { loadClienteOrForbid, loadVendedoresFromCliente } from "../../../_data";
+import { loadClienteOrForbid, loadVendedoresFromCliente } from "../../../../_data";
 import { loadVendedor } from "../_data";
 import { HorariosForm } from "./horarios-form";
 

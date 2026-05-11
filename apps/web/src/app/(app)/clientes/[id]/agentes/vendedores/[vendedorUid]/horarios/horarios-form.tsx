@@ -3,11 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { HorariosVendedor, Vendedor } from "@/lib/db/schema";
-import { UsuarioHorariosGrid } from "../../../../../usuarios/usuario-horarios-grid";
+import { UsuarioHorariosGrid } from "../../../../../../usuarios/usuario-horarios-grid";
 import {
   updateVendedorFields,
   type UpdateVendedorPartial,
-} from "../../../../../usuarios/actions";
+} from "../../../../../../usuarios/actions";
 
 /** Wrapper client component pra aba "Horários". Reusa
  *  <UsuarioHorariosGrid> e salva via updateVendedorFields. Apenas o
